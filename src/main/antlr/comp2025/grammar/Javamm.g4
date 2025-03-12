@@ -1,4 +1,4 @@
-grammar Javamm;
+ grammar Javamm;
 
 @header {
     package pt.up.fe.comp2025;
@@ -21,7 +21,7 @@ importDecl
     ;
 
 classDecl
-    : 'class' ID ( 'extends' ID )? '{' ( varDecl )* ( methodDecl )* '}'
+    : 'class' name=ID ( 'extends' ID )? '{' ( varDecl )* ( methodDecl )* '}'
     ;
 
 varDecl
@@ -29,7 +29,7 @@ varDecl
     ;
 
 methodDecl
-    : ('public')? type ID '(' ( type ID ( ',' type ID )* )? ')' '{' ( varDecl)* ( stmt )* 'return' expr ';' '}'
+    : ('public')? type name=ID '(' ( type ID ( ',' type ID )* )? ')' '{' ( varDecl)* ( stmt )* 'return' expr ';' '}'
     | ('public')? 'static' 'void' 'main' '(' 'String' '[' ']' ID ')' '{' ( varDecl )* ( stmt )* '}'
     ;
 
