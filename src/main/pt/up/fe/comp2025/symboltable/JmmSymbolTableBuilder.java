@@ -33,12 +33,17 @@ public class JmmSymbolTableBuilder {
     }
 
     public JmmSymbolTable build(JmmNode root) {
-
         reports = new ArrayList<>();
 
-        // TODO: After your grammar supports more things inside the program (e.g., imports) you will have to change this
-        var classDecl = root.getChild(0);
-        SpecsCheck.checkArgument(Kind.CLASS_DECL.check(classDecl), () -> "Expected a class declaration: " + classDecl);
+        // Instead of using root.getChild(0), filter the children to find the class declaration.
+        Optional<JmmNode> maybeClassDecl = root.getChildren().stream()
+                .filter(child -> Kind.CLASS_DECL.check(child))
+                .findFirst();
+
+        // If no class declaration is found, throw an error.
+        SpecsCheck.checkArgument(maybeClassDecl.isPresent(),
+                () -> "Expected a class declaration, but got: " + root.getChildren());
+        JmmNode classDecl = maybeClassDecl.get();
         String className = classDecl.get("name");
 
         String extendedClass = "";
@@ -56,35 +61,62 @@ public class JmmSymbolTableBuilder {
         return new JmmSymbolTable(className, extendedClass, fields, methods, returnTypes, params, locals, imports);
     }
 
-
     private Map<String, Type> buildReturnTypes(JmmNode classDecl) {
-        Map<String, Type> map = new HashMap<>();
+        Map<String, Type> returnTypes = new HashMap<>();
 
+        // Iterate over each method declaration in the class
         for (var method : classDecl.getChildren(METHOD_DECL)) {
-            var name = method.get("name");
-            // TODO: After you add more types besides 'int', you will have to update this
-            var returnType = TypeUtils.newIntType();
-            map.put(name, returnType);
+            String methodName = method.get("name");
+
+            // If the method is the main method, its return type is void
+            if (Objects.equals(methodName, "main")) {
+                returnTypes.put(methodName, new Type("void", false));
+            } else {
+                // The first child of a non-main method is the return type node.
+                JmmNode typeNode = method.getChild(0);
+
+                // The grammar defines the type using the "value" attribute:
+                //   - For #Var, it is a simple type.
+                //   - For #VarArray, it represents an array type.
+                //   - For #VarArgs, it is treated similarly to an array.
+                String typeName = typeNode.get("value");
+
+                // Check the node's kind to determine if it is an array
+                boolean isArray = typeNode.getKind().equals("VarArray") || typeNode.getKind().equals("VarArgs");
+
+                // Store the method's return type in the map
+                returnTypes.put(methodName, new Type(typeName, isArray));
+            }
         }
 
-        return map;
+        return returnTypes;
     }
 
 
     private Map<String, List<Symbol>> buildParams(JmmNode classDecl) {
-        Map<String, List<Symbol>> map = new HashMap<>();
+        Map<String, List<Symbol>> paramsMap = new HashMap<>();
 
-        for (var method : classDecl.getChildren(METHOD_DECL)) {
-            var name = method.get("name");
-            var params = method.getChildren(PARAM).stream()
-                    // TODO: When you support new types, this code has to be updated
-                    .map(param -> new Symbol(TypeUtils.newIntType(), param.get("name")))
-                    .toList();
+        // Iterate over every method declaration in the class
+        for (JmmNode method : classDecl.getChildren(METHOD_DECL)) {
+            String methodName = method.get("name");
+            List<Symbol> paramsList = new ArrayList<>();
 
-            map.put(name, params);
+            // Assume that the AST builder creates a node labeled "PARAM" for each parameter.
+            for (JmmNode param : method.getChildren("ParamExp")) {
+                // The first child of the parameter node is the type node
+                JmmNode typeNode = param.getChild(0);
+                // Retrieve the type name from the attribute "value" (set by the grammar)
+                String typeName = typeNode.get("value");
+                // Determine if the parameter is an array type by checking the node kind
+                boolean isArray = typeNode.getKind().equals("VarArray") || typeNode.getKind().equals("VarArgs");
+                // Retrieve the parameter name from the attribute "name" of the parameter node
+                String paramName = param.get("name");
+                // Create a new Symbol for the parameter and add it to the list
+                paramsList.add(new Symbol(new Type(typeName, isArray), paramName));
+            }
+            paramsMap.put(methodName, paramsList);
         }
-
-        return map;
+        return paramsMap;
     }
 
     private Map<String, List<Symbol>> buildLocals(JmmNode classDecl) {
@@ -116,22 +148,53 @@ public class JmmSymbolTableBuilder {
 
 
     private static List<String> buildImports(JmmNode root) {
+<<<<<<< HEAD
 
+=======
+        List<String> imports = new ArrayList<>();
+
+        // Iterate over all children of the root node
+        for (JmmNode child : root.getChildren()) {
+            // Check if the node is an import statement (as defined by our grammar)
+            if ("ImportStmt".equals(child.getKind())) {
+                // Build the full import string using the first ID and any additional parts
+                StringBuilder importBuilder = new StringBuilder();
+                // The first part is stored as an attribute "ID" in the ImportStmt node
+                importBuilder.append(child.get("ID"));
+                // Any additional parts (after a dot) are stored as children nodes
+                for (JmmNode subNode : child.getChildren()) {
+                    importBuilder.append(".").append(subNode.get("ID"));
+                }
+                imports.add(importBuilder.toString());
+            }
+        }
+        return imports;
+>>>>>>> luis
     }
 
 
     private static List<Symbol> getLocalsList(JmmNode methodDecl) {
+        List<Symbol> locals = new ArrayList<>();
 
+        // Iterate over all varDecl nodes within the method declaration
+        for (JmmNode varDecl : methodDecl.getChildren(VAR_DECL)) {
+            // Get the type node (first child of the varDecl)
+            JmmNode typeNode = varDecl.getChild(0);
 
-        List<Symbol> Locals = new ArrayList<>();
-        methodDecl.getChildren(VAR_DECL).stream().forEach(varDecl -> {
-            boolean isArray = Objects.equals(varDecl.getChild(0).getKind(), "VarArray");
-            Type type = new Type(varDecl.getChild(0).get("name"),isArray);
-            String name = varDecl.get("name");
-            Locals.add(new Symbol(type,name));
-        }  );
+            // Check if the type is an array, either VarArray or VarArgs
+            boolean isArray = typeNode.getKind().equals("VarArray") || typeNode.getKind().equals("VarArgs");
 
-        return Locals;
+            // Retrieve the type name from the "value" attribute (not "name")
+            String typeName = typeNode.get("value");
+
+            // Retrieve the variable name from the varDecl node (assumed to be set in attribute "name")
+            String varName = varDecl.get("name");
+
+            // Create a new Symbol with the type and variable name, and add it to the list
+            locals.add(new Symbol(new Type(typeName, isArray), varName));
+        }
+
+        return locals;
     }
 
 

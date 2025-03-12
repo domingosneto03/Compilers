@@ -17,20 +17,33 @@ program
     ;
 
 importDecl
-    : 'import' ID ('.' ID)* ';' #ImportStmt
+    : 'import' name+=ID ('.' name+=ID)* ';' #ImportStmt
     ;
 
 classDecl
+<<<<<<< HEAD
     : 'class' name=ID ( 'extends' ID )? '{' ( varDecl )* ( methodDecl )* '}'
+=======
+    : 'class' name=ID ( 'extends' extendedClass=ID )? '{' ( varDecl )* ( methodDecl )* '}'
+>>>>>>> luis
     ;
 
 varDecl
-    : type ID ';'
+    : type name=ID ';'
     ;
 
 methodDecl
+<<<<<<< HEAD
     : ('public')? type name=ID '(' ( type ID ( ',' type ID )* )? ')' '{' ( varDecl)* ( stmt )* 'return' expr ';' '}'
     | ('public')? 'static' 'void' 'main' '(' 'String' '[' ']' ID ')' '{' ( varDecl )* ( stmt )* '}'
+=======
+    : ('public')? type name=ID '(' ( param ( ',' param )* )? ')' '{' ( varDecl)* ( stmt )* 'return' expr ';' '}'
+    | ('public')? 'static' 'void' 'main' '(' 'String' '[' ']' name=ID ')' '{' ( varDecl )* ( stmt )* '}'
+    ;
+
+param
+    :  type name=ID #ParamExp
+>>>>>>> luis
     ;
 
 type
