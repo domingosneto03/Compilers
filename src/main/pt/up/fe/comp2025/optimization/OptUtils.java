@@ -18,9 +18,12 @@ public class OptUtils {
 
     private final TypeUtils types;
 
+    private int labelCounter = 0;
+
     public OptUtils(TypeUtils types) {
         this.types = types;
         this.temporaries = new AccumulatorMap<>();
+        this.labelCounter = 0;
     }
 
 
@@ -53,11 +56,19 @@ public class OptUtils {
 
         String type = "." + switch (typeName) {
             case "int" -> "i32";
+            case "boolean" -> "bool";
+            case "String" -> "String";
+            case "void" -> "V";
+            case "double" -> "f64";
+            case "float" -> "f32";
             default -> throw new NotImplementedException(typeName);
         };
 
         return type;
     }
 
-
+    public String nextLabel() {
+        labelCounter++;
+        return "label_" + labelCounter;
+    }
 }

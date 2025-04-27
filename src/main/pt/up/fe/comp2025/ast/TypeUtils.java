@@ -20,6 +20,10 @@ public class TypeUtils {
         return new Type("int", false);
     }
 
+    public static Type newVoidType() {
+        return new Type("void", false);
+    }
+
     /**
      * Converts a type node (built according to the grammar) into a {@link Type}.
      * It distinguishes between plain types, array types (VarArray) and varargs (VarArgs).
