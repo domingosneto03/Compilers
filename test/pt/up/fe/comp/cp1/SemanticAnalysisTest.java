@@ -174,5 +174,27 @@ public class SemanticAnalysisTest {
         System.out.println(result.getReports());
     }
 
+    @Test
+    public void duplicateField() {
+        var result = TestUtils.analyse(
+                SpecsIo.getResource("pt/up/fe/comp/cp1/semanticanalysis/DuplicateField.jmm"));
+        TestUtils.mustFail(result);
+    }
+
+    @Test
+    public void duplicateParameter() {
+        var result = TestUtils.analyse(
+                SpecsIo.getResource("pt/up/fe/comp/cp1/semanticanalysis/DuplicateParam.jmm"));
+        TestUtils.mustFail(result);
+    }
+
+    @Test
+    public void duplicateLocalVariable() {
+        var result = TestUtils.analyse(
+                SpecsIo.getResource("pt/up/fe/comp/cp1/semanticanalysis/DuplicateLocal.jmm"));
+        TestUtils.mustFail(result);
+    }
+
+
 
 }

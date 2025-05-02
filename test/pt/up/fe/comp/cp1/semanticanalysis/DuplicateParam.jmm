@@ -1,0 +1,3 @@
+class Test {
+    void m(int a, int a) { } // parâmetro ‘a’ duplicado
+}
