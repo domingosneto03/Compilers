@@ -1,0 +1,8 @@
+class Test {
+  void foo(int... nums) { }
+  void main() {
+    foo();        // 0 args
+    foo(1);       // 1 arg
+    foo(1, 2, 3); // vários args
+  }
+}

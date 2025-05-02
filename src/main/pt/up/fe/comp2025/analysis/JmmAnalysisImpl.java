@@ -4,16 +4,12 @@ import pt.up.fe.comp.jmm.analysis.JmmAnalysis;
 import pt.up.fe.comp.jmm.analysis.JmmSemanticsResult;
 import pt.up.fe.comp.jmm.analysis.table.SymbolTable;
 import pt.up.fe.comp.jmm.ast.JmmNode;
-import pt.up.fe.comp.jmm.ast.JmmNodeImpl;
 import pt.up.fe.comp.jmm.parser.JmmParserResult;
 import pt.up.fe.comp.jmm.report.Report;
 import pt.up.fe.comp.jmm.report.ReportType;
 import pt.up.fe.comp.jmm.report.Stage;
 import pt.up.fe.comp2025.analysis.passes.*;
-import pt.up.fe.comp2025.ast.Kind;
 import pt.up.fe.comp2025.symboltable.JmmSymbolTableBuilder;
-import pt.up.fe.comp2025.analysis.passes.MethodVerificationVisitor;
-
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,12 +19,11 @@ import java.util.List;
  */
 public class JmmAnalysisImpl implements JmmAnalysis {
 
-
     /**
      * Analysis passes that will be applied to the AST.
      *
-     * @param table
-     * @return
+     * @param table The symbol table for the program.
+     * @return A list of AnalysisVisitor instances.
      */
     private List<AnalysisVisitor> buildPasses(SymbolTable table) {
         return List.of(
@@ -36,74 +31,70 @@ public class JmmAnalysisImpl implements JmmAnalysis {
                 new BinaryOperationCheck(),
                 new ArrayArithmeticCheck(),
                 new ArrayAccessCombinedCheck(),
+                new ReturnCheckVisitor(),
                 new MethodVerificationVisitor(),
                 new AssignmentTypeCheck(),
                 new ConditionCheck(),
                 new ArrayInitializerUsageCheck(),
                 new DuplicateDeclarationCheck(),
                 new VarargsDeclarationCheck()
-
         );
-
-
     }
 
     @Override
     public JmmSemanticsResult buildSymbolTable(JmmParserResult parserResult) {
         JmmNode rootNode = parserResult.getRootNode();
 
+        // Constrói a symbol table e recolhe erros de duplicados
         var symbolTableBuilder = new JmmSymbolTableBuilder();
         SymbolTable table = symbolTableBuilder.build(rootNode);
+        List<Report> initialReports = symbolTableBuilder.getReports();
 
-        List<Report> reports = symbolTableBuilder.getReports();
-
-        return new JmmSemanticsResult(parserResult, table, reports);
+        return new JmmSemanticsResult(parserResult, table, initialReports);
     }
 
     @Override
     public JmmSemanticsResult semanticAnalysis(JmmSemanticsResult semanticsResult) {
-
         var table = semanticsResult.getSymbolTable();
-
-        var analysisVisitors = buildPasses(table);
-
         var rootNode = semanticsResult.getRootNode();
 
-        var reports = new ArrayList<Report>();
+        // Começa com quaisquer reports da construção da symbol table
+        var reports = new ArrayList<>(semanticsResult.getReports());
 
-        // This is a simple implementation that assumes all passes are implemented as visitors, each one making a full visit of the AST.
-        // There are other implementations that reduce the number of full AST visits, this is not required for the work, but a nice challenge if you want to try.
+        // Se já houver erros, não prossegue com os passes semânticos
+        boolean hasInitialErrors = reports.stream()
+                .anyMatch(r -> r.getType() == ReportType.ERROR);
+        if (hasInitialErrors) {
+            return new JmmSemanticsResult(semanticsResult, reports);
+        }
+
+        // Executa cada pass em sequência
+        var analysisVisitors = buildPasses(table);
         for (var analysisVisitor : analysisVisitors) {
             try {
                 var passReports = analysisVisitor.analyze(rootNode, table);
-
-                var hasSymbolTableErrors = passReports.stream()
-                        .anyMatch(report -> report.getType() == ReportType.ERROR);
-
-
                 reports.addAll(passReports);
 
-                // Return early in case of error report
-                if (hasSymbolTableErrors) {
-                    System.out.println("Found errors: " + reports);
+                // Interrompe se algum erro for reportado
+                boolean hasError = passReports.stream()
+                        .anyMatch(r -> r.getType() == ReportType.ERROR);
+                if (hasError) {
                     return new JmmSemanticsResult(semanticsResult, reports);
                 }
-
             } catch (Exception e) {
-                reports.add(Report.newError(Stage.SEMANTIC,
+                // Captura exceções inesperadas durante o pass
+                reports.add(Report.newError(
+                        Stage.SEMANTIC,
                         -1,
                         -1,
-                        "Problem while executing analysis pass '" + analysisVisitor.getClass() + "'",
-                        e)
-                );
-                System.out.println("Exception: " + reports);
+                        "Problem while executing analysis pass '" +
+                                analysisVisitor.getClass().getSimpleName() + "'",
+                        e
+                ));
+                return new JmmSemanticsResult(semanticsResult, reports);
             }
-
         }
-
 
         return new JmmSemanticsResult(semanticsResult, reports);
     }
-
-
 }

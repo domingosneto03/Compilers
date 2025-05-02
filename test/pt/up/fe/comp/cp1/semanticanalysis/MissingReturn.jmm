@@ -1,0 +1,6 @@
+class Test {
+  int foo(boolean b) {
+    if (b) return 1;
+    // falta return no caso b == false
+  }
+}

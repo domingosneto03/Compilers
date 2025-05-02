@@ -195,6 +195,53 @@ public class SemanticAnalysisTest {
         TestUtils.mustFail(result);
     }
 
+    @Test
+    public void callWrongArgCount() {
+        var result = TestUtils.analyse(
+                SpecsIo.getResource("pt/up/fe/comp/cp1/semanticanalysis/CallWrongArgCount.jmm"));
+        TestUtils.mustFail(result);
+    }
 
+    @Test
+    public void callWrongArgType() {
+        var result = TestUtils.analyse(
+                SpecsIo.getResource("pt/up/fe/comp/cp1/semanticanalysis/CallWrongArgType.jmm"));
+        TestUtils.mustFail(result);
+    }
+
+    @Test
+    public void callCorrectVarargs() {
+        var result = TestUtils.analyse(
+                SpecsIo.getResource("pt/up/fe/comp/cp1/semanticanalysis/CallCorrectVarargs.jmm"));
+        TestUtils.noErrors(result);
+    }
+
+    @Test
+    public void callVarargsWrongType() {
+        var result = TestUtils.analyse(
+                SpecsIo.getResource("pt/up/fe/comp/cp1/semanticanalysis/CallVarargsWrongType.jmm"));
+        TestUtils.mustFail(result);
+    }
+
+    @Test
+    public void missingReturn() {
+        var result = TestUtils.analyse(
+                SpecsIo.getResource("pt/up/fe/comp/cp1/semanticanalysis/MissingReturn.jmm"));
+        TestUtils.mustFail(result);
+    }
+
+    @Test
+    public void returnValueInVoid() {
+        var result = TestUtils.analyse(
+                SpecsIo.getResource("pt/up/fe/comp/cp1/semanticanalysis/ReturnValueInVoid.jmm"));
+        TestUtils.mustFail(result);
+    }
+
+    @Test
+    public void callCorrectArgs() {
+        var result = TestUtils.analyse(
+                SpecsIo.getResource("pt/up/fe/comp/cp1/semanticanalysis/CallCorrectArgs.jmm"));
+        TestUtils.noErrors(result);
+    }
 
 }

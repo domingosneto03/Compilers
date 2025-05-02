@@ -189,4 +189,44 @@ public class TypeUtils {
     public Type getExprType(JmmNode expr) {
         return getExprType(expr, "main");
     }
+
+    /**
+     * Infer the type of an expression node, usando o mesmo algoritmo de getExprType.
+     */
+    public static Type inferExprType(JmmNode expr, SymbolTable table, String currentMethod) {
+        return new TypeUtils(table).getExprType(expr, currentMethod);
+    }
+
+    /**
+     * Verifica compatibilidade entre t1 (esperado) e t2 (atual):
+     * - mesmos nome e array-flag, ou
+     * - se forem objetos não-array, verifica herança usando o symbol table.
+     */
+    public static boolean compatibleWith(Type expected, Type actual, SymbolTable table) {
+        if (expected.equals(actual)) {
+            return true;
+        }
+        // se forem objetos (não primitivos nem array)
+        if (!expected.isArray() && !actual.isArray()
+                && !isPrimitive(expected.getName())) {
+            // percorre a chain de extends
+            String sup = ((JmmSymbolTable) table).getSuper();
+            String cur = actual.getName();
+            while (sup != null && !sup.isEmpty()) {
+                if (sup.equals(expected.getName())) return true;
+                // next up
+                cur = sup;
+                sup = ((JmmSymbolTable) table).getSuper();
+            }
+        }
+        return false;
+    }
+
+    private static boolean isPrimitive(String name) {
+        return name.equals("int") || name.equals("boolean")
+                || name.equals("double") || name.equals("float")
+                || name.equals("String");
+    }
+
+
 }

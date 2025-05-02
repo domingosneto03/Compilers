@@ -1,0 +1,6 @@
+class Test {
+  int foo(int x) { return x; }
+  void main() {
+    foo(true);  // boolean onde se espera int
+  }
+}

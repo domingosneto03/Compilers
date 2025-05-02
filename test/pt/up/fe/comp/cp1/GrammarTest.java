@@ -1,16 +1,3 @@
-/**
- * Copyright 2022 SPeCS.
- * <p>
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * <p>
- * http://www.apache.org/licenses/LICENSE-2.0
- * <p>
- * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
- * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
- * specific language governing permissions and limitations under the License. under the License.
- */
-
 package pt.up.fe.comp.cp1;
 
 import org.junit.Test;
@@ -266,9 +253,25 @@ public class GrammarTest {
         TestUtils.parseVerbose("(((obj.method()[1])).length)", EXPRESSION);
     }
 
+    // --------------------------------------------
+    // Reserved‐keyword tests (devem falhar)
+    // --------------------------------------------
 
+    @Test(expected = Exception.class)
+    public void testReservedAsFieldName() {
+        // 'int' não pode ser um ID: falha no lexer
+        TestUtils.parseVerbose("class Test { int int; }");
+    }
 
+    @Test(expected = Exception.class)
+    public void testReservedAsMethodName() {
+        // 'if' não pode ser usado como nome de método
+        TestUtils.parseVerbose("class Test { void if() {} }");
+    }
 
-
-
+    @Test(expected = Exception.class)
+    public void testReservedAsClassName() {
+        // 'class' não pode ser um ID
+        TestUtils.parseVerbose("class class {}");
+    }
 }

@@ -1,0 +1,6 @@
+class Test {
+  void foo(int... nums) { }
+  void main() {
+    foo(true);  // boolean onde se espera int...
+  }
+}

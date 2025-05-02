@@ -163,4 +163,19 @@ public class SymbolTableTest {
         assertEquals("int", locals.get(0).getType().getName());
 
     }
+    @Test
+    public void duplicateFieldSymbolTable() {
+        // usa o mesmo ficheiro de semanticanalysis
+        test("semanticanalysis/DuplicateField.jmm", true);
+    }
+
+    @Test
+    public void duplicateParamSymbolTable() {
+        test("semanticanalysis/DuplicateParam.jmm", true);
+    }
+
+    @Test
+    public void duplicateLocalSymbolTable() {
+        test("semanticanalysis/DuplicateLocal.jmm", true);
+    }
 }
