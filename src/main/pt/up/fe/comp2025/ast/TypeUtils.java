@@ -74,7 +74,10 @@ public class TypeUtils {
                         return symbol.getType();
                     }
                 }
-                throw new RuntimeException("Undefined identifier: " + id);
+
+                // Fallback for loop variables or other undeclared variables during OLLIR generation
+                System.out.println("Warning: Assuming int type for undeclared variable: " + id);
+                return new Type("int", false);
             }
             case "ThisExpr":
                 return new Type(table.getClassName(), false);

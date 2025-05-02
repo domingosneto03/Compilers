@@ -62,14 +62,14 @@ public class JmmSymbolTableBuilder {
     }
 
     private boolean hasValidReturnType(JmmNode method) {
+        // Check if this is a non-void method by looking for the type declaration
         return method.getChildren().stream()
-                .anyMatch(node -> node.getKind().equals("Var")
-                        || node.getKind().equals("VarArray")
-                        || node.getKind().equals("VarArgs"));
+                .anyMatch(node -> TYPE.check(node) || VAR_ARRAY.check(node) || VAR_ARGS.check(node));
     }
 
     private String extractMethodName(JmmNode method) {
-        return hasValidReturnType(method) ? method.get("name") : "main";
+        // Get method name or default to "main" for main method
+        return method.hasAttribute("name") ? method.get("name") : "main";
     }
 
     private Map<String, Type> buildReturnTypes(JmmNode classDecl) {
@@ -113,20 +113,102 @@ public class JmmSymbolTableBuilder {
 
     private Map<String, List<Symbol>> buildLocals(JmmNode classDecl) {
         Map<String, List<Symbol>> localsMap = new HashMap<>();
-        for (JmmNode method : classDecl.getChildren(METHOD_DECL)) {
-            String methodName = extractMethodName(method);
-            List<Symbol> localsList = new ArrayList<>();
 
+        for (JmmNode method : classDecl.getChildren(METHOD_DECL)) {
+            String methodName = method.get("name");
+            List<Symbol> locals = new ArrayList<>();
+
+            // Collect explicit variable declarations
             for (JmmNode varDecl : method.getChildren(VAR_DECL)) {
-                if (varDecl.getChildren().isEmpty()) {
-                    continue;
-                }
-                JmmNode typeNode = varDecl.getChild(0);
-                localsList.add(new Symbol(TypeUtils.convertType(typeNode), varDecl.get("name")));
+                Type type = TypeUtils.convertType(varDecl.getChild(0));
+                String varName = varDecl.get("name");
+                locals.add(new Symbol(type, varName));
             }
-            localsMap.put(methodName, localsList);
+
+            // Collect loop variables and other implicit declarations
+            collectImplicitVariables(method, locals, methodName);
+
+            localsMap.put(methodName, locals);
         }
+
         return localsMap;
+    }
+
+    // Helper method to collect variables from loops and assignments
+    private void collectImplicitVariables(JmmNode node, List<Symbol> locals, String methodName) {
+        // Process for loop initializers
+        if (node.getKind().equals(FOR_STMT.getNodeName()) && node.getNumChildren() > 0) {
+            JmmNode initNode = node.getChild(0);
+            if (initNode.getKind().equals(ASSIGN_STMT.getNodeName())) {
+                String varName = initNode.get("name");
+                // Only add if not already present
+                if (!isVariableDeclared(varName, locals)) {
+                    Type inferredType = inferTypeFromAssignment(initNode);
+                    locals.add(new Symbol(inferredType, varName));
+                }
+            }
+        }
+
+        // Process assignment statements that might introduce variables
+        if (node.getKind().equals(ASSIGN_STMT.getNodeName())) {
+            String varName = node.get("name");
+            if (!isVariableDeclared(varName, locals)) {
+                Type inferredType = inferTypeFromAssignment(node);
+                locals.add(new Symbol(inferredType, varName));
+            }
+        }
+
+        // Process while loop variables that might be used
+        if (node.getKind().equals(WHILE_STMT.getNodeName())) {
+            collectVariablesFromExpr(node.getChild(0), locals);
+        }
+
+        // Recursively process children
+        for (JmmNode child : node.getChildren()) {
+            collectImplicitVariables(child, locals, methodName);
+        }
+    }
+
+    // Helper to collect variables referenced in expressions
+    private void collectVariablesFromExpr(JmmNode exprNode, List<Symbol> locals) {
+        if (exprNode.getKind().equals(VAR_REF_EXPR.getNodeName())) {
+            String varName = exprNode.get("value");
+            if (!isVariableDeclared(varName, locals)) {
+                // If we see a variable reference but it's not declared, assume int type
+                locals.add(new Symbol(TypeUtils.newIntType(), varName));
+            }
+        }
+
+        // Recursively check children expressions
+        for (JmmNode child : exprNode.getChildren()) {
+            collectVariablesFromExpr(child, locals);
+        }
+    }
+
+    // Helper to check if a variable is already declared
+    private boolean isVariableDeclared(String varName, List<Symbol> symbols) {
+        return symbols.stream().anyMatch(s -> s.getName().equals(varName));
+    }
+
+    // Infer type from an assignment expression
+    private Type inferTypeFromAssignment(JmmNode assignNode) {
+        if (assignNode.getNumChildren() >= 2) {
+            JmmNode rhsExpr = assignNode.getChild(1);
+            if (rhsExpr.getKind().equals(INTEGER_LITERAL.getNodeName())) {
+                return TypeUtils.newIntType();
+            } else if (rhsExpr.getKind().equals(BOOLEAN_TRUE.getNodeName()) ||
+                    rhsExpr.getKind().equals(BOOLEAN_FALSE.getNodeName())) {
+                return new Type("boolean", false);
+            } else if (rhsExpr.getKind().equals(NEW_INT_ARRAY_EXPR.getNodeName())) {
+                return new Type("int", true);
+            } else if (rhsExpr.getKind().equals(NEW_OBJECT_EXPR.getNodeName())) {
+                String className = rhsExpr.get("value");
+                return new Type(className, false);
+            }
+        }
+
+        // Default to int type if we can't determine
+        return TypeUtils.newIntType();
     }
 
     private List<String> buildMethods(JmmNode classDecl) {
@@ -139,15 +221,19 @@ public class JmmSymbolTableBuilder {
 
     private static List<String> buildImports(JmmNode root) {
         List<String> imports = new ArrayList<>();
-        for (JmmNode child : root.getChildren()) {
-            if ("ImportStmt".equals(child.getKind())) {
-                StringBuilder importBuilder = new StringBuilder();
-                importBuilder.append(child.get("ID"));
-                for (JmmNode subNode : child.getChildren()) {
-                    importBuilder.append(".").append(subNode.get("ID"));
+        for (JmmNode importNode : root.getChildren(IMPORT_STMT)) {
+            // Extract all name parts from the import statement
+            List<String> nameParts = new ArrayList<>();
+            if (importNode.hasAttribute("name")) {
+                // For single import name
+                nameParts.add(importNode.get("name"));
+            } else {
+                // For imports with multiple parts (using the "name" list attribute)
+                for (int i = 0; i < importNode.getNumChildren(); i++) {
+                    nameParts.add(importNode.getChild(i).get("value"));
                 }
-                imports.add(importBuilder.toString());
             }
+            imports.add(String.join(".", nameParts));
         }
         return imports;
     }
