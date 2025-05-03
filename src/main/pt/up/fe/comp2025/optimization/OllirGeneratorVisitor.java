@@ -152,74 +152,115 @@ public class OllirGeneratorVisitor extends AJmmVisitor<Void, String> {
 
 
     private String visitMethodDecl(JmmNode node, Void unused) {
-        StringBuilder code = new StringBuilder(".method ");
+        StringBuilder code = new StringBuilder();
 
         // Add access modifiers
         boolean isPublic = node.getBoolean("isPublic", false);
-        if (isPublic) code.append("public ");
-        boolean isStatic = node.getBoolean("isStatic", false);
-        if (isStatic) code.append("static ");
-
-        // Method name
-        String name = node.get("name");
-        code.append(name).append("(");
-
-        // Parameters
-        var paramNodes = node.getChildren(PARAM);
-        if (!paramNodes.isEmpty()) {
-            var paramCodes = paramNodes.stream().map(this::visit).collect(Collectors.joining(", "));
-            code.append(paramCodes);
+        if (isPublic) {
+            code.append(".method public ");
+        } else {
+            code.append(".method ");
         }
 
-        code.append(")");
+        // Get method name and check if it's main
+        String methodName = node.get("name");
+        boolean isStatic = methodName.equals("main");
 
-        // Return type
-        Type returnType = name.equals("main") ? new Type("void", false) : table.getReturnType(name);
-        if (returnType == null) returnType = new Type("void", false);
-        code.append(ollirTypes.toOllirType(returnType));
-
-        code.append(" {\n");
-
-        // Local variables
-        for (var varDecl : node.getChildren(VAR_DECL)) {
-            JmmNode typeNode = varDecl.getChild(0);
-            String varName = varDecl.get("name");
-            Type varType = types.convertType(typeNode);
-            String ollirType = ollirTypes.toOllirType(varType);
-            code.append("    ").append(varName).append(ollirType).append(" :=").append(ollirType)
-                    .append(" 0").append(ollirType).append(";\n");
+        if (isStatic) {
+            code.append("static ");
         }
 
-        // 🔥 PROCESS ALL CHILDREN THAT LOOK LIKE STATEMENTS
+        // Add method name
+        code.append(methodName).append("(");
+
+        // Add parameters
+        var params = node.getChildren().stream()
+                .filter(child -> PARAM.check(child))
+                .map(child -> visit(child))
+                .collect(Collectors.joining(", "));
+        code.append(params).append(")");
+
+        // Add return type - Check if there are children before accessing
+        Type returnType;
+        if (node.getNumChildren() > 0 && (
+                TYPE.check(node.getChild(0)) ||
+                        VAR_ARRAY.check(node.getChild(0)) ||
+                        VAR_ARGS.check(node.getChild(0)))) {
+            var returnOllirType = ollirTypes.toOllirType(node.getChild(0));
+            code.append(returnOllirType);
+            // Save return type for later
+            returnType = TypeUtils.convertType(node.getChild(0));
+        } else {
+            code.append(".V"); // void return type
+            returnType = new Type("void", false);
+        }
+
+        // Start method body
+        code.append(L_BRACKET);
+
+        // Add local variable initializations
+        var locals = table.getLocalVariables(methodName);
+        if (locals != null) {  // Add null check
+            for (var localVar : locals) {
+                var type = localVar.getType();
+                var localName = localVar.getName();
+                var ollirType = ollirTypes.toOllirType(type);
+                code.append(localName).append(ollirType)
+                        .append(SPACE).append(ASSIGN).append(ollirType).append(SPACE);
+
+                // Initialize with default value based on type
+                if (type.getName().equals("int")) {
+                    code.append("0").append(ollirType);
+                } else if (type.getName().equals("boolean")) {
+                    code.append("0").append(ollirType);
+                } else {
+                    code.append("0").append(ollirType); // Default for objects
+                }
+                code.append(END_STMT);
+            }
+        }
+
+        // Process statements
         for (var child : node.getChildren()) {
-            String kind = child.getKind();
+            if (child.getKind().equals("Stmt")) {
+                String stmt = visit(child);
+                code.append(stmt);
+            }
+        }
 
-            if (kind.endsWith("Stmt") || kind.contains("Stmt")) {
-                String stmtCode = visit(child);
-                if (!stmtCode.isEmpty()) {
-                    code.append("    ").append(stmtCode);
+        // Process return expression if present (binary expressions, method calls, etc.)
+        for (var child : node.getChildren()) {
+            if (child.getKind().equals("BinaryExpr") ||
+                    child.getKind().equals("MethodCallExpr") ||
+                    child.getKind().equals("ArrayAccessExpr")) {
+
+                // Use expression visitor to get the result
+                OllirExprResult exprResult = exprVisitor.visit(child);
+
+                // Add the computation code
+                code.append(exprResult.getComputation());
+
+                // Add the return statement
+                if (!isStatic) { // If not main method
+                    code.append("ret").append(ollirTypes.toOllirType(types.getExprType(child, methodName)))
+                            .append(SPACE)
+                            .append(exprResult.getCode())
+                            .append(END_STMT);
                 }
             }
         }
 
-        // Return fallback if no return statement exists
-        boolean hasReturn = node.getChildren().stream().anyMatch(child -> child.getKind().equals("ReturnStmt"));
-        if (!hasReturn) {
-            if (returnType.getName().equals("void")) {
-                code.append("    ret.V;\n");
-            } else {
-                String defaultVal = returnType.getName().equals("boolean") || returnType.getName().equals("int")
-                        ? "0" + ollirTypes.toOllirType(returnType)
-                        : "null" + ollirTypes.toOllirType(returnType);
-                code.append("    ret").append(ollirTypes.toOllirType(returnType))
-                        .append(" ").append(defaultVal).append(";\n");
-            }
+        // If no explicit return was added and it's not void, add a default return
+        if (!isStatic && !code.toString().contains("ret") && !returnType.getName().equals("void")) {
+            String returnOllirType = ollirTypes.toOllirType(returnType);
+            code.append("ret").append(returnOllirType).append(SPACE).append("0").append(returnOllirType).append(END_STMT);
         }
 
-        code.append("}\n\n");
+        // End method
+        code.append(R_BRACKET);
+
         return code.toString();
     }
-
 
 
     private String visitClass(JmmNode node, Void unused) {
@@ -348,30 +389,32 @@ public class OllirGeneratorVisitor extends AJmmVisitor<Void, String> {
     }
 
     private String visitWhileStmt(JmmNode node, Void unused) {
+        // Generate unique labels for the loop
+        String loopLabel = "while" + System.identityHashCode(node);
+        String endLabel = "end" + loopLabel;
+
+        // Visit the condition expression
+        var condExpr = exprVisitor.visit(node.getChild(0)); // Condition is the first child
         StringBuilder code = new StringBuilder();
 
-        // Create unique labels for loop
-        String loopLabel = ollirTypes.nextTemp("loop");
-        String endLabel = ollirTypes.nextTemp("endloop");
+        // Start of loop
+        code.append(loopLabel).append(":\n");
 
-        // Loop label
-        code.append(loopLabel).append(":").append(NL);
-
-        // Get the condition expression
-        var condExpr = exprVisitor.visit(node.getChild(0));
+        // Add computation for the condition
         code.append(condExpr.getComputation());
 
-        // If condition is false, exit loop
-        code.append("if (!").append(condExpr.getCode()).append(") goto ").append(endLabel).append(END_STMT);
+        // Evaluate the condition and add a conditional branch
+        code.append("if (!").append(condExpr.getCode()).append(") goto ").append(endLabel).append(";\n");
 
-        // Loop body - visit the body statement (child 1)
-        code.append(visit(node.getChild(1)));
+        // Visit and process the loop body (second child)
+        String bodyCode = visit(node.getChild(1));
+        code.append(bodyCode);
 
-        // Jump back to start of loop
-        code.append("goto ").append(loopLabel).append(END_STMT);
+        // Jump back to the start of the loop
+        code.append("goto ").append(loopLabel).append(";\n");
 
-        // End label
-        code.append(endLabel).append(":").append(NL);
+        // End of loop
+        code.append(endLabel).append(":\n");
 
         return code.toString();
     }
@@ -424,17 +467,21 @@ public class OllirGeneratorVisitor extends AJmmVisitor<Void, String> {
     }
 
     private String visitExprStmt(JmmNode node, Void unused) {
-        // Expression statement - just evaluate the expression
-        var exprResult = exprVisitor.visit(node.getChild(0));
-        if (exprResult.getComputation().isBlank()) {
-            // If it's a simple method call like `io.println(a);`, emit it explicitly
-            String code = exprResult.getCode() + ";\n";
-            System.out.println("[visitExprStmt] emitted simple expr: " + code.trim());
-            return code;
+        // Get the expression and visit it
+        OllirExprResult exprResult = exprVisitor.visit(node.getChild(0));
+
+        // Build the complete statement
+        StringBuilder code = new StringBuilder();
+
+        // Include any computation needed before the expression
+        code.append(exprResult.getComputation());
+
+        // For expressions like method calls, we need to include the actual call
+        // expression as a statement
+        if (!exprResult.getComputation().contains(exprResult.getCode())) {
+            code.append(exprResult.getCode()).append(";\n");
         }
 
-        System.out.println("[visitExprStmt] emitted expr computation: " + exprResult.getComputation());
-
-        return exprResult.getComputation();
+        return code.toString();
     }
 }
