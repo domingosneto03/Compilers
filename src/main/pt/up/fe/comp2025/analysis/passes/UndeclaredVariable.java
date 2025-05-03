@@ -43,6 +43,11 @@ public class UndeclaredVariable extends AnalysisVisitor {
             return null;
         }
 
+        if (varRefName.equals("io")) {
+            return null;
+        }
+
+
         // Check if it is declared as a local variable.
         if (table.getLocalVariables(currentMethod).stream()
                 .anyMatch(local -> local.getName().equals(varRefName))) {
@@ -55,15 +60,13 @@ public class UndeclaredVariable extends AnalysisVisitor {
             return null;
         }
 
-        // Check if it matches an imported class.
+        // Check if it matches an imported class or package.
         if (table.getImports().stream().anyMatch(importStr -> {
-            // Extract the simple name (after the last dot).
-            int lastDot = importStr.lastIndexOf('.');
-            String simpleName = (lastDot >= 0) ? importStr.substring(lastDot + 1) : importStr;
-            return simpleName.equals(varRefName);
+            return importStr.equals(varRefName) || importStr.endsWith("." + varRefName);
         })) {
             return null;
         }
+
 
         // If not found anywhere, report an error.
         String message = String.format("Variable '%s' does not exist.", varRefName);

@@ -3,6 +3,7 @@ package pt.up.fe.comp2025.optimization;
 import pt.up.fe.comp.jmm.analysis.JmmSemanticsResult;
 import pt.up.fe.comp.jmm.ollir.JmmOptimization;
 import pt.up.fe.comp.jmm.ollir.OllirResult;
+import pt.up.fe.comp2025.optimization.visitors.ConstantFoldingVisitor;
 
 import java.util.Collections;
 
@@ -24,8 +25,10 @@ public class JmmOptimizationImpl implements JmmOptimization {
 
     @Override
     public JmmSemanticsResult optimize(JmmSemanticsResult semanticsResult) {
+        var rootNode = semanticsResult.getRootNode();
 
-        //TODO: Do your AST-based optimizations here
+        var constFold = new ConstantFoldingVisitor();
+        constFold.visit(rootNode);
 
         return semanticsResult;
     }
