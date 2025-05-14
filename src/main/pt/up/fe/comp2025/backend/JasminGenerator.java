@@ -1,18 +1,18 @@
 package pt.up.fe.comp2025.backend;
 
 import org.specs.comp.ollir.ClassUnit;
-import org.specs.comp.ollir.LiteralElement;
 import org.specs.comp.ollir.Method;
 import org.specs.comp.ollir.Operand;
+import org.specs.comp.ollir.LiteralElement;
 import org.specs.comp.ollir.inst.AssignInstruction;
 import org.specs.comp.ollir.inst.BinaryOpInstruction;
 import org.specs.comp.ollir.inst.ReturnInstruction;
 import org.specs.comp.ollir.inst.SingleOpInstruction;
 import org.specs.comp.ollir.tree.TreeNode;
+
 import pt.up.fe.comp.jmm.ollir.OllirResult;
 import pt.up.fe.comp.jmm.report.Report;
 import pt.up.fe.specs.util.classmap.FunctionClassMap;
-import pt.up.fe.specs.util.exceptions.NotImplementedException;
 import pt.up.fe.specs.util.utilities.StringLines;
 
 import java.util.ArrayList;
@@ -20,223 +20,179 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Generates Jasmin code from an OllirResult.
- * <p>
- * One JasminGenerator instance per OllirResult.
+ * JasminGenerator com instruções low-cost (iconst_*, bipush, sipush, iload_*, istore_*, iinc, etc.).
+ * Não usa Type do OLLIR; tudo é tratado como inteiro ("i").
  */
 public class JasminGenerator {
 
-    private static final String NL = "\n";
-    private static final String TAB = "   ";
+    private static final String NL  = "\n";
+    private static final String TAB = "    ";
 
     private final OllirResult ollirResult;
+    private final List<Report> reports;
+    private final JasminUtils utils;
+    private final FunctionClassMap<TreeNode, String> gens;
 
-    List<Report> reports;
-
-    String code;
-
-    Method currentMethod;
-
-    private final JasminUtils types;
-
-    private final FunctionClassMap<TreeNode, String> generators;
+    private Method currentMethod;
+    private String code;
 
     public JasminGenerator(OllirResult ollirResult) {
         this.ollirResult = ollirResult;
+        this.reports    = new ArrayList<>();
+        this.utils      = new JasminUtils(ollirResult);
+        this.gens       = new FunctionClassMap<>();
 
-        reports = new ArrayList<>();
-        code = null;
-        currentMethod = null;
-
-        types = new JasminUtils(ollirResult);
-
-        this.generators = new FunctionClassMap<>();
-        generators.put(ClassUnit.class, this::generateClassUnit);
-        generators.put(Method.class, this::generateMethod);
-        generators.put(AssignInstruction.class, this::generateAssign);
-        generators.put(SingleOpInstruction.class, this::generateSingleOp);
-        generators.put(LiteralElement.class, this::generateLiteral);
-        generators.put(Operand.class, this::generateOperand);
-        generators.put(BinaryOpInstruction.class, this::generateBinaryOp);
-        generators.put(ReturnInstruction.class, this::generateReturn);
+        gens.put(ClassUnit.class,            this::genClassUnit);
+        gens.put(Method.class,               this::genMethod);
+        gens.put(AssignInstruction.class,    this::genAssign);
+        gens.put(SingleOpInstruction.class,  this::genSingleOp);
+        gens.put(LiteralElement.class,       this::genLiteral);
+        gens.put(Operand.class,              this::genOperand);
+        gens.put(BinaryOpInstruction.class,  this::genBinaryOp);
+        gens.put(ReturnInstruction.class,    this::genReturn);
     }
-
-    private String apply(TreeNode node) {
-        var code = new StringBuilder();
-
-        // Print the corresponding OLLIR code as a comment
-        //code.append("; ").append(node).append(NL);
-
-        code.append(generators.apply(node));
-
-        return code.toString();
-    }
-
 
     public List<Report> getReports() {
         return reports;
     }
 
     public String build() {
-
-        // This way, build is idempotent
         if (code == null) {
             code = apply(ollirResult.getOllirClass());
         }
-
         return code;
     }
 
+    private String apply(TreeNode node) {
+        return gens.apply(node);
+    }
 
-    private String generateClassUnit(ClassUnit classUnit) {
+    private String genClassUnit(ClassUnit cu) {
+        var sb = new StringBuilder();
+        sb.append(".class ").append(cu.getClassName()).append(NL)
+                .append(".super java/lang/Object").append(NL).append(NL);
 
-        var code = new StringBuilder();
+        sb.append("; default constructor").append(NL)
+                .append(".method public <init>()V").append(NL)
+                .append(TAB).append("aload_0").append(NL)
+                .append(TAB).append("invokespecial java/lang/Object/<init>()V").append(NL)
+                .append(TAB).append("return").append(NL)
+                .append(".end method").append(NL).append(NL);
 
-        // generate class name
-        var className = ollirResult.getOllirClass().getClassName();
-        code.append(".class ").append(className).append(NL).append(NL);
-
-        // TODO: When you support 'extends', this must be updated
-        var fullSuperClass = "java/lang/Object";
-
-        code.append(".super ").append(fullSuperClass).append(NL);
-
-        // generate a single constructor method
-        var defaultConstructor = """
-                ;default constructor
-                .method public <init>()V
-                    aload_0
-                    invokespecial %s/<init>()V
-                    return
-                .end method
-                """.formatted(fullSuperClass);
-        code.append(defaultConstructor);
-
-        // generate code for all other methods
-        for (var method : ollirResult.getOllirClass().getMethods()) {
-
-            // Ignore constructor, since there is always one constructor
-            // that receives no arguments, and has been already added
-            // previously
-            if (method.isConstructMethod()) {
-                continue;
+        for (var m : cu.getMethods()) {
+            if (!m.isConstructMethod()) {
+                sb.append(apply(m));
             }
-
-            code.append(apply(method));
         }
-
-        return code.toString();
+        return sb.toString();
     }
 
+    private String genMethod(Method m) {
+        this.currentMethod = m;
+        var sb = new StringBuilder();
 
-    private String generateMethod(Method method) {
-        //System.out.println("STARTING METHOD " + method.getMethodName());
-        // set method
-        currentMethod = method;
+        // hard-coded params e retorno como inteiro
+        String params = "I";
+        String ret    = "I";
 
-        var code = new StringBuilder();
+        sb.append(NL)
+                .append(".method ")
+                .append(utils.getModifier(m.getMethodAccessModifier()))
+                .append(m.getMethodName())
+                .append("(").append(params).append(")").append(ret)
+                .append(NL);
 
-        // calculate modifier
-        var modifier = types.getModifier(method.getMethodAccessModifier());
+        sb.append(TAB).append(".limit stack 99").append(NL);
+        sb.append(TAB).append(".limit locals 99").append(NL);
 
-        var methodName = method.getMethodName();
-
-        // TODO: Hardcoded param types and return type, needs to be expanded
-        var params = "I";
-        var returnType = "I";
-
-        code.append("\n.method ").append(modifier)
-                .append(methodName)
-                .append("(" + params + ")" + returnType).append(NL);
-
-        // Add limits
-        code.append(TAB).append(".limit stack 99").append(NL);
-        code.append(TAB).append(".limit locals 99").append(NL);
-
-        for (var inst : method.getInstructions()) {
-            var instCode = StringLines.getLines(apply(inst)).stream()
+        for (var inst : m.getInstructions()) {
+            String body = StringLines
+                    .getLines(apply(inst))
+                    .stream()
                     .collect(Collectors.joining(NL + TAB, TAB, NL));
-
-            code.append(instCode);
+            sb.append(body);
         }
 
-        code.append(".end method\n");
-
-        // unset method
-        currentMethod = null;
-        //System.out.println("ENDING METHOD " + method.getMethodName());
-        return code.toString();
+        sb.append(".end method").append(NL);
+        this.currentMethod = null;
+        return sb.toString();
     }
 
-    private String generateAssign(AssignInstruction assign) {
-        var code = new StringBuilder();
-
-        // generate code for loading what's on the right
-        code.append(apply(assign.getRhs()));
-
-        // store value in the stack in destination
-        var lhs = assign.getDest();
-
-        if (!(lhs instanceof Operand)) {
-            throw new NotImplementedException(lhs.getClass());
+    private String genAssign(AssignInstruction ai) {
+        var sb = new StringBuilder();
+        // deteta iinc: x = x + c ou x = x - c
+        var rhs = ai.getRhs(); // Element direto
+        if (rhs instanceof BinaryOpInstruction bin
+                && bin.getLeftOperand() instanceof Operand var
+                && bin.getRightOperand() instanceof LiteralElement lit
+                && var.getName().equals(((Operand) ai.getDest()).getName())) {
+            int idx = currentMethod.getVarTable().get(var.getName()).getVirtualReg();
+            int c   = Integer.parseInt(lit.getLiteral());
+            if (bin.getOperation().getOpType().name().equals("SUB")) {
+                c = -c;
+            }
+            sb.append("iinc ").append(idx).append(" ").append(c).append(NL);
+            return sb.toString();
         }
 
-        var operand = (Operand) lhs;
-
-        // get register
-        var reg = currentMethod.getVarTable().get(operand.getName());
-
-
-        // TODO: Hardcoded for int type, needs to be expanded
-        code.append("istore ").append(reg.getVirtualReg()).append(NL);
-
-        return code.toString();
+        // caso geral: carrega RHS e depois armazena no LHS
+        sb.append(apply(rhs));
+        Operand dest = (Operand) ai.getDest();
+        int idx = currentMethod.getVarTable().get(dest.getName()).getVirtualReg();
+        sb.append(utils.getStoreInstruction("i", idx)).append(NL);
+        return sb.toString();
     }
 
-    private String generateSingleOp(SingleOpInstruction singleOp) {
-        return apply(singleOp.getSingleOperand());
+    private String genSingleOp(SingleOpInstruction so) {
+        return apply(so.getSingleOperand());
     }
 
-    private String generateLiteral(LiteralElement literal) {
-        return "ldc " + literal.getLiteral() + NL;
+    private String genLiteral(LiteralElement lit) {
+        int v = Integer.parseInt(lit.getLiteral());
+        return utils.getConstInstruction(v) + NL;
     }
 
-    private String generateOperand(Operand operand) {
-        // get register
-        var reg = currentMethod.getVarTable().get(operand.getName());
-
-        // TODO: Hardcoded for int type, needs to be expanded
-        return "iload " + reg.getVirtualReg() + NL;
+    private String genOperand(Operand op) {
+        int idx = currentMethod.getVarTable().get(op.getName()).getVirtualReg();
+        return utils.getLoadInstruction("i", idx) + NL;
     }
 
-    private String generateBinaryOp(BinaryOpInstruction binaryOp) {
-        var code = new StringBuilder();
+    private String genBinaryOp(BinaryOpInstruction bin) {
+        var sb = new StringBuilder();
+        sb.append(apply(bin.getLeftOperand()));
+        sb.append(apply(bin.getRightOperand()));
+        String opType = bin.getOperation().getOpType().name();
+        String instr;
+        switch (opType) {
+            // aritmética
+            case "ADD": instr = "iadd"; break;
+            case "SUB": instr = "isub"; break;
+            case "MUL": instr = "imul"; break;
+            case "DIV": instr = "idiv"; break;
+            case "REM": instr = "irem"; break;
 
-        // load values on the left and on the right
-        code.append(apply(binaryOp.getLeftOperand()));
-        code.append(apply(binaryOp.getRightOperand()));
+            // comparações contra zero (se o OLLIR usar BinOp LTH, GTH, …)
+            case "LTH": instr = "iflt"; break;
+            case "GTH": instr = "ifgt"; break;
+            case "LE":  instr = "ifle"; break;
+            case "GE":  instr = "ifge"; break;
+            case "EQ":  instr = "ifeq"; break;
+            case "NE":  instr = "ifne"; break;
 
-        // TODO: Hardcoded for int type, needs to be expanded
-        var typePrefix = "i";
-
-        // apply operation
-        var op = switch (binaryOp.getOperation().getOpType()) {
-            case ADD -> "add";
-            case MUL -> "mul";
-            default -> throw new NotImplementedException(binaryOp.getOperation().getOpType());
-        };
-
-        code.append(typePrefix + op).append(NL);
-
-        return code.toString();
+            default:
+                throw new RuntimeException("Op não suportada: " + opType);
+        }
+        sb.append(instr).append(NL);
+        return sb.toString();
     }
 
-    private String generateReturn(ReturnInstruction returnInst) {
-        var code = new StringBuilder();
-
-        // TODO: Hardcoded for int type, needs to be expanded
-        code.append("ireturn").append(NL);
-
-        return code.toString();
+    private String genReturn(ReturnInstruction ri) {
+        if (ri.getOperand() != null && ri.getOperand().isPresent()) {
+            // unwrap do Optional<Element> e cast para TreeNode
+            var elem = ri.getOperand().get();
+            return apply((TreeNode) elem) + "ireturn" + NL;
+        }
+        return "return" + NL;
     }
+
 }
