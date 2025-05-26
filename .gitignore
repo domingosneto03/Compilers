@@ -15,3 +15,7 @@ gradle*
 output.ollir
 output.jasmin
 output.j
+
+# macOS system files
+.DS_Store
+**/.DS_Store
