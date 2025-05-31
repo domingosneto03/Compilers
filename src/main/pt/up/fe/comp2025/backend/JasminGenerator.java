@@ -408,16 +408,13 @@ public class JasminGenerator {
         var code = new StringBuilder();
 
         // Handle array assignments first
-        if (assign.getDest() instanceof ArrayOperand) {
-            ArrayOperand arrayDest = (ArrayOperand) assign.getDest();
-
+        if (assign.getDest() instanceof ArrayOperand arrayDest) {
             // Load array reference
-            code.append(apply(arrayDest));
+            var reg = currentMethod.getVarTable().get(arrayDest.getName());
+            code.append("aload ").append(reg.getVirtualReg()).append(NL);
 
-            // Load indices
-            for (Element index : arrayDest.getIndexOperands()) {
-                code.append(apply((TreeNode) index));
-            }
+            // Load index (only single-dimensional arrays assumed)
+            code.append(apply(arrayDest.getIndexOperands().get(0)));
 
             // Load value to store
             code.append(apply(assign.getRhs()));
@@ -460,6 +457,7 @@ public class JasminGenerator {
 
         return code.toString();
     }
+
 
     private String generateSingleOp(SingleOpInstruction singleOp) {
         return apply(singleOp.getSingleOperand());
