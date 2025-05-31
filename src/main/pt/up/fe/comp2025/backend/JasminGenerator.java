@@ -308,74 +308,86 @@ public class JasminGenerator {
     }
 
     private int calculateStackLimit(Method method) {
-        // Conservative estimation - could be more sophisticated
         int maxStack = 0;
         int currentStack = 0;
 
         for (var inst : method.getInstructions()) {
             switch (inst.getInstType()) {
-                case ASSIGN:
+                case ASSIGN -> {
                     AssignInstruction assign = (AssignInstruction) inst;
-                    if (assign.getRhs() instanceof BinaryOpInstruction) {
-                        currentStack += 2; // two operands
+                    var rhs = assign.getRhs();
+
+                    if (rhs instanceof BinaryOpInstruction) {
+                        currentStack += 2;
                         maxStack = Math.max(maxStack, currentStack);
-                        currentStack -= 1; // result
-                    } else if (assign.getRhs() instanceof GetFieldInstruction) {
-                        currentStack += 1; // object reference
+                        currentStack--; // result left on stack
+                    } else if (rhs instanceof UnaryOpInstruction) {
+                        currentStack += 1; // operand
+                        maxStack = Math.max(maxStack, currentStack + 1); // result and extra jump values
+                        currentStack = 1;
+                    } else if (rhs instanceof CallInstruction) {
+                        var call = (CallInstruction) rhs;
+                        currentStack += call.getArguments().size();
+                        if (call.getCaller() != null) currentStack++;
                         maxStack = Math.max(maxStack, currentStack);
-                        currentStack = 1; // field value remains
-                    } else if (assign.getRhs() instanceof CallInstruction) {
-                        CallInstruction call = (CallInstruction) assign.getRhs();
-                        // Object + arguments
-                        currentStack += 1 + call.getArguments().size();
-                        maxStack = Math.max(maxStack, currentStack);
-                        currentStack = 1; // result remains
+                        currentStack = 1;
                     } else {
-                        currentStack += 1; // simple load
+                        currentStack += 1;
                         maxStack = Math.max(maxStack, currentStack);
                     }
-                    currentStack -= 1; // store pops value
-                    break;
-                case CALL:
+
+                    currentStack--; // istore/astore
+                }
+
+                case CALL -> {
                     CallInstruction call = (CallInstruction) inst;
-                    currentStack += 1 + call.getArguments().size();
+                    int args = call.getArguments().size();
+                    if (call.getCaller() != null) args++;
+                    currentStack += args;
                     maxStack = Math.max(maxStack, currentStack);
-                    currentStack = 0; // call consumes all
-                    break;
-                case GETFIELD:
-                    currentStack += 1; // object reference
-                    maxStack = Math.max(maxStack, currentStack);
-                    currentStack = 1; // field value remains
-                    break;
-                case PUTFIELD:
-                    currentStack += 2; // object reference + value
-                    maxStack = Math.max(maxStack, currentStack);
-                    currentStack = 0; // putfield consumes both
-                    break;
-                case RETURN:
+                    currentStack = 0;
+                }
+
+                case GETFIELD -> {
                     currentStack += 1;
                     maxStack = Math.max(maxStack, currentStack);
-                    break;
-                case BRANCH:
-                    if (inst instanceof CondBranchInstruction) {
-                        CondBranchInstruction condBranch = (CondBranchInstruction) inst;
-                        currentStack += condBranch.getOperands().size();
+                    currentStack = 1;
+                }
+
+                case PUTFIELD -> {
+                    currentStack += 2;
+                    maxStack = Math.max(maxStack, currentStack);
+                    currentStack = 0;
+                }
+
+                case RETURN -> {
+                    currentStack++;
+                    maxStack = Math.max(maxStack, currentStack);
+                }
+
+                case BRANCH -> {
+                    if (inst instanceof CondBranchInstruction condBranch) {
+                        int opCount = condBranch.getOperands().size();
+                        currentStack += opCount;
                         maxStack = Math.max(maxStack, currentStack);
-                        currentStack = 0; // branch consumes operands
+                        currentStack = 0;
                     }
-                    break;
-                case GOTO:
-                    // goto doesn't affect stack
-                    break;
-                default:
-                    currentStack += 1;
+                }
+
+                case GOTO -> {
+                    // no change
+                }
+
+                default -> {
+                    currentStack++;
                     maxStack = Math.max(maxStack, currentStack);
-                    break;
+                }
             }
         }
 
-        return Math.max(maxStack, 2); // minimum reasonable stack
+        return Math.max(maxStack, 3); // safe minimum
     }
+
 
     private int calculateLocalsLimit(Method method) {
         if (method.getVarTable().isEmpty()) {
