@@ -316,81 +316,57 @@ public class JasminGenerator {
         int currentStack = 0;
 
         for (var inst : method.getInstructions()) {
+            int instMax = 0;
+
             switch (inst.getInstType()) {
                 case ASSIGN -> {
-                    AssignInstruction assign = (AssignInstruction) inst;
-                    var rhs = assign.getRhs();
+                    var rhs = ((AssignInstruction) inst).getRhs();
 
                     if (rhs instanceof BinaryOpInstruction) {
-                        currentStack += 2;
-                        maxStack = Math.max(maxStack, currentStack);
-                        currentStack--; // result left on stack
+                        instMax = 2;
                     } else if (rhs instanceof UnaryOpInstruction) {
-                        currentStack += 1; // operand
-                        maxStack = Math.max(maxStack, currentStack + 1); // result and extra jump values
-                        currentStack = 1;
-                    } else if (rhs instanceof CallInstruction) {
-                        var call = (CallInstruction) rhs;
-                        currentStack += call.getArguments().size();
-                        if (call.getCaller() != null) currentStack++;
-                        maxStack = Math.max(maxStack, currentStack);
-                        currentStack = 1;
+                        instMax = 1;
+                    } else if (rhs instanceof CallInstruction call) {
+                        instMax = (call.getCaller() != null ? 1 : 0) + call.getArguments().size();
                     } else {
-                        currentStack += 1;
-                        maxStack = Math.max(maxStack, currentStack);
+                        instMax = 1;
                     }
-
-                    currentStack--; // istore/astore
                 }
 
                 case CALL -> {
                     CallInstruction call = (CallInstruction) inst;
-                    int args = call.getArguments().size();
-                    if (call.getCaller() != null) args++;
-                    currentStack += args;
-                    maxStack = Math.max(maxStack, currentStack);
-                    currentStack = 0;
+                    instMax = (call.getCaller() != null ? 1 : 0) + call.getArguments().size();
                 }
 
-                case GETFIELD -> {
-                    currentStack += 1;
-                    maxStack = Math.max(maxStack, currentStack);
-                    currentStack = 1;
-                }
-
-                case PUTFIELD -> {
-                    currentStack += 2;
-                    maxStack = Math.max(maxStack, currentStack);
-                    currentStack = 0;
-                }
-
-                case RETURN -> {
-                    currentStack++;
-                    maxStack = Math.max(maxStack, currentStack);
-                }
+                case RETURN -> instMax = 1;
 
                 case BRANCH -> {
-                    if (inst instanceof CondBranchInstruction condBranch) {
-                        int opCount = condBranch.getOperands().size();
-                        currentStack += opCount;
-                        maxStack = Math.max(maxStack, currentStack);
-                        currentStack = 0;
+                    if (inst instanceof CondBranchInstruction cond) {
+                        instMax = estimateConditionDepth(cond.getCondition());
                     }
                 }
 
-                case GOTO -> {
-                    // no change
-                }
-
-                default -> {
-                    currentStack++;
-                    maxStack = Math.max(maxStack, currentStack);
-                }
+                default -> instMax = 1;
             }
+
+            maxStack = Math.max(maxStack, instMax);
         }
 
-        return Math.max(maxStack, 3); // safe minimum
+        return Math.max(maxStack, 4); // safe lower bound
     }
+
+
+
+    private int estimateConditionDepth(Instruction condition) {
+        if (condition instanceof BinaryOpInstruction bin) {
+            return 2; // two operands
+        }
+        if (condition instanceof UnaryOpInstruction) {
+            return 1;
+        }
+        return 1;
+    }
+
 
 
     private int calculateLocalsLimit(Method method) {
