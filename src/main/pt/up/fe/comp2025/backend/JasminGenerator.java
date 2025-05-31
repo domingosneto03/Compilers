@@ -62,6 +62,9 @@ public class JasminGenerator {
         generators.put(CondBranchInstruction.class, this::generateCondBranch);
         generators.put(GotoInstruction.class, this::generateGoto);
         generators.put(InvokeStaticInstruction.class, this::generateInvokeStatic);
+        generators.put(ArrayLengthInstruction.class, this::generateArrayLength);
+        generators.put(UnaryOpInstruction.class, this::generateUnaryOp);
+
 
     }
 
@@ -470,54 +473,42 @@ public class JasminGenerator {
     }
 
     private String generateOperand(Operand operand) {
-        // Handle array access
-        if (operand instanceof ArrayOperand) {
-            ArrayOperand arrayOp = (ArrayOperand) operand;
-            var code = new StringBuilder();
-
-            // Load array reference
-            code.append(apply(arrayOp));
-
-            // Load indices
-            for (Element index : arrayOp.getIndexOperands()) {
-                code.append(apply((TreeNode) index));
-            }
-
-            // Load from array
-            var elementType = types.getJasminType(operand.getType());
-            if (elementType.equals("I") || elementType.equals("Z")) {
-                code.append("iaload").append(NL);
-            } else {
-                code.append("aaload").append(NL);
-            }
-
-            return code.toString();
+        if (operand instanceof ArrayOperand arrayOp) {
+            return generateArrayAccess(arrayOp, true); // true = read (iaload)
         }
 
-        // Regular operand
         var reg = currentMethod.getVarTable().get(operand.getName());
         var typeCode = types.getJasminType(operand.getType());
 
-        String loadInst;
-        int regNum = reg.getVirtualReg();
+        String loadInst = switch (typeCode) {
+            case "I", "Z" -> "iload";
+            default -> "aload";
+        };
 
-        // Use optimized load instructions
-        if (typeCode.equals("I") || typeCode.equals("Z")) {
-            if (regNum <= 3) {
-                loadInst = "iload_" + regNum;
-            } else {
-                loadInst = "iload " + regNum;
-            }
+        return loadInst + " " + reg.getVirtualReg() + NL;
+    }
+
+    private String generateArrayAccess(ArrayOperand arrayOp, boolean isLoad) {
+        var code = new StringBuilder();
+
+        // Load array reference
+        var baseReg = currentMethod.getVarTable().get(arrayOp.getName());
+        code.append("aload ").append(baseReg.getVirtualReg()).append(NL);
+
+        // Load index (assumes single-dimensional array access)
+        code.append(apply(arrayOp.getIndexOperands().get(0)));
+
+        // Emit correct Jasmin instruction
+        if (isLoad) {
+            code.append("iaload").append(NL);  // Read array value
         } else {
-            if (regNum <= 3) {
-                loadInst = "aload_" + regNum;
-            } else {
-                loadInst = "aload " + regNum;
-            }
+            code.append("iastore").append(NL); // Write to array
         }
 
-        return loadInst + NL;
+        return code.toString();
     }
+
+
 
     private String generateBinaryOp(BinaryOpInstruction binaryOp) {
         var code = new StringBuilder();
@@ -700,6 +691,8 @@ public class JasminGenerator {
             return generateInvokeSpecial((InvokeSpecialInstruction) call);
         } else if (call instanceof NewInstruction) {
             return generateNew((NewInstruction) call);
+        } else if (call instanceof ArrayLengthInstruction) {
+            return generateArrayLength((ArrayLengthInstruction) call);
         } else {
             throw new NotImplementedException("Call instruction type: " + call.getClass());
         }
@@ -761,4 +754,43 @@ public class JasminGenerator {
 
         return code.toString();
     }
+
+    // Add this new method to handle array length:
+    private String generateArrayLength(ArrayLengthInstruction arrayLength) {
+        var code = new StringBuilder();
+
+        // Load the array reference using getCaller() instead of getFirstOperand()
+        code.append(apply(arrayLength.getCaller()));
+
+        // Get array length
+        code.append(TAB).append("arraylength").append(NL);
+
+        return code.toString();
+    }
+
+    private String generateUnaryOp(UnaryOpInstruction unaryOp) {
+        var code = new StringBuilder();
+
+        code.append(apply(unaryOp.getOperand()));
+
+        switch (unaryOp.getOperation().getOpType()) {
+            case NOT, NOTB -> {
+                String trueLabel = "NOT_TRUE_" + System.nanoTime();
+                String endLabel = "NOT_END_" + System.nanoTime();
+
+                code.append("ifeq ").append(trueLabel).append(NL);
+                code.append("iconst_0").append(NL);
+                code.append("goto ").append(endLabel).append(NL);
+                code.append(trueLabel).append(":").append(NL);
+                code.append("iconst_1").append(NL);
+                code.append(endLabel).append(":").append(NL);
+            }
+
+            default -> throw new NotImplementedException("Unary op " + unaryOp.getOperation().getOpType());
+        }
+
+        return code.toString();
+    }
+
+
 }
