@@ -3,11 +3,15 @@ package pt.up.fe.comp2025.backend;
 import org.specs.comp.ollir.*;
 import org.specs.comp.ollir.inst.*;
 import org.specs.comp.ollir.tree.TreeNode;
+import org.specs.comp.ollir.type.BuiltinKind;
+import org.specs.comp.ollir.type.BuiltinType;
 import pt.up.fe.comp.jmm.ollir.OllirResult;
 import pt.up.fe.comp.jmm.report.Report;
 import pt.up.fe.specs.util.classmap.FunctionClassMap;
 import pt.up.fe.specs.util.exceptions.NotImplementedException;
 import pt.up.fe.specs.util.utilities.StringLines;
+import org.specs.comp.ollir.type.ArrayType;
+
 
 import java.util.ArrayList;
 import java.util.List;
@@ -668,32 +672,35 @@ public class JasminGenerator {
 
     private String generateNew(NewInstruction newInst) {
         var code = new StringBuilder();
-
-        // Get the return type which tells us what we're creating
         var returnType = newInst.getReturnType();
 
-        if (returnType.toString().contains("array")) {
-            // Array creation - load size argument first
+        if (returnType instanceof ArrayType arrayType) {
+            // Load size of the array
             if (!newInst.getArguments().isEmpty()) {
-                code.append(apply((TreeNode) newInst.getArguments().get(0))); // Load array size
+                code.append(apply((TreeNode) newInst.getArguments().get(0)));
             }
 
-            if (returnType.toString().contains("int") || returnType.toString().contains("i32")) {
+            // Determine if it's a primitive int array or an object array
+            var elementType = arrayType.getElementType();
+            if (elementType instanceof BuiltinType builtin && builtin.getKind() == BuiltinKind.INT32) {
                 code.append("newarray int").append(NL);
             } else {
-                // For object arrays
-                String objType = types.getJasminType(returnType).replaceAll("\\[", "");
+                var objType = types.getJasminType(elementType).replaceAll("^L|;$", "");
                 code.append("anewarray ").append(objType).append(NL);
             }
         } else {
             // Object creation
             String className = types.getJasminType(returnType).replaceAll("^L|;$", "");
             code.append("new ").append(className).append(NL);
-            code.append("dup").append(NL); // Duplicate reference for constructor call
+            code.append("dup").append(NL);
         }
 
         return code.toString();
     }
+
+
+
+
 
     private String generateCall(CallInstruction call) {
         // This method handles generic calls and delegates to specific methods
