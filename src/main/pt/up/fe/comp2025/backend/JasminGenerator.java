@@ -429,21 +429,23 @@ public class JasminGenerator {
         var code = new StringBuilder();
 
         // Special case: x = x + 1  or x = x - 1  -> use iinc
-        if (assign.getRhs() instanceof BinaryOpInstruction binOp &&
-                binOp.getLeftOperand() instanceof Operand left &&
-                binOp.getRightOperand() instanceof LiteralElement right &&
-                assign.getDest() instanceof Operand dest &&
-                left.getName().equals(dest.getName())) {
+        if (assign.getRhs() instanceof BinaryOpInstruction binOp
+                && binOp.getLeftOperand() instanceof Operand left
+                && binOp.getRightOperand() instanceof LiteralElement right
+                && assign.getDest() instanceof Operand dest
+                && left.getName().equals(dest.getName())
+                && right.getLiteral().equals("1")) {
 
-            String literal = right.getLiteral();
-            String opType = binOp.getOperation().getOpType().name();
-            int amount = opType.equals("ADD") ? 1 : opType.equals("SUB") ? -1 : 0;
+            int reg = currentMethod.getVarTable().get(dest.getName()).getVirtualReg();
+            int amount = binOp.getOperation().getOpType() == OperationType.ADD ? 1 :
+                    binOp.getOperation().getOpType() == OperationType.SUB ? -1 : 0;
 
-            if ((amount == 1 || amount == -1) && literal.equals("1")) {
-                int reg = currentMethod.getVarTable().get(dest.getName()).getVirtualReg();
+            if (amount != 0)
                 return "iinc " + reg + " " + amount + NL;
-            }
         }
+
+
+
 
         // Handle array assignments first
         if (assign.getDest() instanceof ArrayOperand arrayDest) {
