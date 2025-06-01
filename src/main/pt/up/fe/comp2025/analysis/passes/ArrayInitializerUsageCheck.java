@@ -28,7 +28,6 @@ public class ArrayInitializerUsageCheck extends AnalysisVisitor {
     private Void visitMethodDecl(JmmNode methodDecl, SymbolTable table) {
         this.currentMethod = methodDecl.get("name").equals("args") ? "main" : methodDecl.get("name");
         this.typeUtils = new TypeUtils(table);
-        //System.out.println("[DEBUG] ArrayIntializerUsageCheck — entering method: " + currentMethod);
         return null;
     }
 
@@ -38,7 +37,6 @@ public class ArrayInitializerUsageCheck extends AnalysisVisitor {
         JmmNode left = node.getChild(0);
         JmmNode right = node.getChild(1);
 
-        // Only handle simple variable references
         if (!Kind.VAR_REF_EXPR.check(left)) {
             return null;
         }
@@ -74,7 +72,6 @@ public class ArrayInitializerUsageCheck extends AnalysisVisitor {
         }
 
         if (expected == null) {
-            // Some other pass handles undeclared variables
             return null;
         }
 
@@ -100,7 +97,6 @@ public class ArrayInitializerUsageCheck extends AnalysisVisitor {
 
             checkArrayInitializerUsage(expr, expected, actual, node);
 
-            // ✅ Skip return type check if actual type is unknown
             if (!"unknown".equals(actual.getName()) &&
                     (!expected.getName().equals(actual.getName()) || expected.isArray() != actual.isArray())) {
                 addReport(Report.newError(
@@ -126,7 +122,6 @@ public class ArrayInitializerUsageCheck extends AnalysisVisitor {
         String methodName = node.get("method");
 
         if (!table.getMethods().contains(methodName)) {
-            // Method is likely from import or superclass — skip check
             return null;
         }
 

@@ -49,7 +49,6 @@ public class VoidTypeVariableCheck extends AnalysisVisitor {
                 ));
             }
         } catch (Exception e) {
-            // If type extraction fails, let other analysis passes handle it
             return null;
         }
         

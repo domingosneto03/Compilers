@@ -75,7 +75,6 @@ public class OllirGeneratorVisitor extends AJmmVisitor<Void, String> {
         String methodName = node.getAncestor("MethodDecl").map(m -> m.get("name")).orElse("main");
         if ("args".equals(methodName)) methodName = "main";
 
-        // Handle array assignments like a[i] = ...
         if (lhs.getKind().equals("ArrayAccessExpr")) {
             var arrayExpr = exprVisitor.visit(lhs.getChild(0)); // array name (e.g., a)
             var indexExpr = exprVisitor.visit(lhs.getChild(1)); // index (e.g., i)
@@ -95,17 +94,12 @@ public class OllirGeneratorVisitor extends AJmmVisitor<Void, String> {
             return code.toString();
         }
 
-        // Regular variable assignment
-        // Handle special cases for left-hand side expressions
         JmmNode effectiveLhs = lhs;
-        
-        // If the lhs is a ParenthesizedExpr, unwrap it to get the actual variable node
+
         if (lhs.getKind().equals("ParenthesizedExpr")) {
             effectiveLhs = lhs.getChild(0);
         }
-        
-        // Only try to access 'value' attribute if the node type is expected to have it
-        // Using final for lhsName since it's used in lambda expressions
+
         final String lhsName;
         if (effectiveLhs.getKind().equals("VarRefExpr") || 
             effectiveLhs.getKind().equals("PostfixExpr") || 
@@ -142,7 +136,6 @@ public class OllirGeneratorVisitor extends AJmmVisitor<Void, String> {
     private String visitReturn(JmmNode node, Void unused) {
         StringBuilder code = new StringBuilder();
 
-        // Get the method name from the ancestors
         JmmNode methodNode = node;
         while (methodNode != null && !methodNode.getKind().equals(METHOD_DECL.getNodeName())) {
             methodNode = methodNode.getParent();
@@ -154,21 +147,16 @@ public class OllirGeneratorVisitor extends AJmmVisitor<Void, String> {
 
         String methodName = methodNode.get("name");
 
-        // Get the return type of the method
         Type retType = table.getReturnType(methodName);
 
-        // Process the expression if it exists
         var expr = node.getNumChildren() > 0 ? exprVisitor.visit(node.getChild(0)) : OllirExprResult.EMPTY;
 
-        // Add computation code
         code.append(expr.getComputation());
 
-        // Add the return instruction with the correct type
         code.append("ret");
         code.append(ollirTypes.toOllirType(retType));
         code.append(SPACE);
 
-        // Add the expression code if present
         if (node.getNumChildren() > 0) {
             code.append(expr.getCode());
         }
@@ -230,7 +218,6 @@ public class OllirGeneratorVisitor extends AJmmVisitor<Void, String> {
                     .append(" 0").append(ollirType).append(";\n");
         }
 
-        // Process statements and expressions
         for (var child : node.getChildren()) {
             String kind = child.getKind();
 
@@ -246,23 +233,19 @@ public class OllirGeneratorVisitor extends AJmmVisitor<Void, String> {
                     code.append("    ").append(exprResult.getComputation());
                 }
 
-                // Emit a return using the evaluated expression
                 if (!exprResult.getCode().isBlank()) {
                     String tempVar = ollirTypes.nextTemp("retVal");
                     String retType = ollirTypes.toOllirType(returnType);
 
-                    // Assign result to temp
                     code.append("    ").append(tempVar).append(retType)
                             .append(" :=").append(retType)
                             .append(" ").append(exprResult.getCode()).append(";\n");
 
-                    // Return the temp
                     code.append("    ret").append(retType).append(" ").append(tempVar).append(retType).append(";\n");
                 }
             }
         }
 
-        // Return fallback if no return statement exists
         boolean hasReturn = node.getChildren().stream().anyMatch(child -> child.getKind().equals("ReturnStmt"));
         if (!hasReturn) {
             if (returnType.getName().equals("void")) {
@@ -289,7 +272,6 @@ public class OllirGeneratorVisitor extends AJmmVisitor<Void, String> {
         code.append(NL);
         code.append(table.getClassName());
 
-        // Add extends clause if there is a superclass
         String superClassName = table.getSuper();
         if (superClassName != null && !superClassName.isEmpty()) {
             code.append(" extends ").append(superClassName);
@@ -333,12 +315,10 @@ public class OllirGeneratorVisitor extends AJmmVisitor<Void, String> {
 
         StringBuilder code = new StringBuilder();
 
-        // Generate import statements at the beginning of the file
         for (String importStr : table.getImports()) {
             code.append("import ").append(importStr).append(";").append(NL);
         }
 
-        // Add an extra line after imports if any
         if (!table.getImports().isEmpty()) {
             code.append(NL);
         }
@@ -368,25 +348,15 @@ public class OllirGeneratorVisitor extends AJmmVisitor<Void, String> {
 
     private String visitWithElseStmt(JmmNode node, Void unused) {
 
-        /*
-        System.out.println("[DEBUG] visitWithElseStmt:");
-        System.out.println("Condition: " + node.getChild(0).toTree());
-        System.out.println("Then block: " + node.getChild(1).toTree());
-        System.out.println("Else block: " + node.getChild(2).toTree());
-         */
-
         StringBuilder code = new StringBuilder();
 
-        // Get the condition expression
         var condExpr = exprVisitor.visit(node.getChild(0));
         code.append(condExpr.getComputation());
 
-        // Create unique labels for the if/else structure using the new method
         String elseLabel = ollirTypes.nextControlFlowLabel("else");
         String endLabel = ollirTypes.nextControlFlowLabel("endif");
         String thenLabel = ollirTypes.nextControlFlowLabel("then");
 
-        // If condition is false, jump to else
         code.append("if (").append(condExpr.getCode()).append(") goto ").append(thenLabel).append(END_STMT);
         code.append(elseLabel).append(":").append(NL);
         code.append(visit(node.getChild(2).getChild(0)));
@@ -396,16 +366,12 @@ public class OllirGeneratorVisitor extends AJmmVisitor<Void, String> {
         code.append(endLabel).append(":").append(NL);
 
 
-        //System.out.println("[DEBUG] OLLIR if-else emitted:\n" + code);
-
-
         return code.toString();
     }
 
     private String visitWhileStmt(JmmNode node, Void unused) {
         StringBuilder code = new StringBuilder();
 
-        // Use the nextControlFlowLabel method to create unique labels
         String loopLabel = ollirTypes.nextControlFlowLabel("loop");
         String endLabel = ollirTypes.nextControlFlowLabel("endloop");
 
@@ -414,7 +380,6 @@ public class OllirGeneratorVisitor extends AJmmVisitor<Void, String> {
         var condExpr = exprVisitor.visit(node.getChild(0));
         code.append(condExpr.getComputation());
 
-        // Fixed OLLIR syntax for the if statement
         code.append("if (!.bool ").append(condExpr.getCode()).append(") goto ").append(endLabel).append(END_STMT);
 
         code.append(visit(node.getChild(1)));
@@ -430,7 +395,6 @@ public class OllirGeneratorVisitor extends AJmmVisitor<Void, String> {
     private String visitBlockStmt(JmmNode node, Void unused) {
         StringBuilder code = new StringBuilder();
 
-        // Visit all statements in the block
         for (JmmNode stmt : node.getChildren()) {
             code.append(visit(stmt));
         }
@@ -439,10 +403,8 @@ public class OllirGeneratorVisitor extends AJmmVisitor<Void, String> {
     }
 
     private String visitExprStmt(JmmNode node, Void unused) {
-        // Process the expression
         var expr = exprVisitor.visit(node.getChild(0));
 
-        // Return the computation which should include the method call
         return expr.getComputation();
     }
 }

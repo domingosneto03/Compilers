@@ -66,7 +66,6 @@ public class UndeclaredVariable extends AnalysisVisitor {
         // Check if it matches an imported class.
         List<String> imports = table.getImports();
         if (imports != null && imports.stream().anyMatch(importStr -> {
-            // Extract the simple name (after the last dot).
             int lastDot = importStr.lastIndexOf('.');
             String simpleName = (lastDot >= 0) ? importStr.substring(lastDot + 1) : importStr;
             return simpleName.equals(varRefName);
@@ -74,8 +73,6 @@ public class UndeclaredVariable extends AnalysisVisitor {
             return null;
         }
 
-        // Additional check: if the method doesn't exist in the symbol table,
-        // this might be a symbol table building issue, so report it differently
         if (parameters == null) {
             String message = String.format("Method '%s' not found in symbol table when checking variable '%s'.",
                     currentMethod, varRefName);
@@ -87,7 +84,6 @@ public class UndeclaredVariable extends AnalysisVisitor {
             return null;
         }
 
-        // If not found anywhere, report an error.
         String message = String.format("Variable '%s' does not exist.", varRefName);
         addReport(Report.newError(Stage.SEMANTIC,
                 varRefExpr.getLine(),

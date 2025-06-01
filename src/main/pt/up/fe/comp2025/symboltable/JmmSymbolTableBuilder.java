@@ -35,12 +35,10 @@ public class JmmSymbolTableBuilder {
     public JmmSymbolTable build(JmmNode root) {
         reports = new ArrayList<>();
 
-        // Instead of using root.getChild(0), filter the children to find the class declaration.
         Optional<JmmNode> maybeClassDecl = root.getChildren().stream()
                 .filter(child -> Kind.CLASS_DECL.check(child))
                 .findFirst();
 
-        // If no class declaration is found, throw an error.
         SpecsCheck.checkArgument(maybeClassDecl.isPresent(),
                 () -> "Expected a class declaration, but got: " + root.getChildren());
         JmmNode classDecl = maybeClassDecl.get();
@@ -92,7 +90,6 @@ public class JmmSymbolTableBuilder {
                         .findFirst()
                         .orElseThrow(() -> new NotImplementedException("Expected a valid return type for method: " + methodName));
 
-                // Use TypeUtils.convertType to get the method's return type.
                 returnTypes.put(methodName, TypeUtils.convertType(returnTypeNode));
             } else {
                 returnTypes.put(methodName, new Type("void", false));
@@ -112,8 +109,7 @@ public class JmmSymbolTableBuilder {
                 JmmNode typeNode = param.getChild(0);
                 paramsList.add(new Symbol(TypeUtils.convertType(typeNode), param.get("name")));
             }
-            
-            // Special handling for the main method - ensure it always has the "args" parameter
+
             if ("main".equals(methodName) && paramsList.isEmpty()) {
                 // Add the String[] args parameter for main method if not present
                 paramsList.add(new Symbol(new Type("String", true), "args"));
@@ -122,7 +118,6 @@ public class JmmSymbolTableBuilder {
             paramsMap.put(methodName, paramsList);
         }
 
-        // Ensure ALL methods from buildMethods() have entries, even if empty
         List<String> allMethods = buildMethods(classDecl);
         for (String methodName : allMethods) {
             if (!paramsMap.containsKey(methodName)) {
@@ -137,7 +132,6 @@ public class JmmSymbolTableBuilder {
             }
         }
 
-        //System.out.println("[DEBUG] buildParams() — params map:");
         paramsMap.forEach((method, vars) -> {
             System.out.println("  Method: " + method);
             for (var var : vars) {
@@ -164,7 +158,6 @@ public class JmmSymbolTableBuilder {
             localsMap.put(methodName, localsList);
         }
 
-        // Ensure ALL methods from buildMethods() have entries, even if empty
         List<String> allMethods = buildMethods(classDecl);
         for (String methodName : allMethods) {
             if (!localsMap.containsKey(methodName)) {
@@ -172,7 +165,6 @@ public class JmmSymbolTableBuilder {
             }
         }
 
-        //System.out.println("[DEBUG] buildLocals() — locals map:");
         localsMap.forEach((method, vars) -> {
             System.out.println("  Method: " + method);
             for (var var : vars) {

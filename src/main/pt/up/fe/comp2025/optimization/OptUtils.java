@@ -31,7 +31,6 @@ public class OptUtils {
     }
 
     public String nextTemp(String prefix) {
-        // Subtract 1 because the base is 1
         var nextTempNum = temporaries.add(prefix) - 1;
         return prefix + nextTempNum;
     }
@@ -47,8 +46,7 @@ public class OptUtils {
     public String nextControlFlowLabel(String basePrefix) {
         int nestLevel = nestingLevels.getOrDefault(basePrefix, 0);
         nestingLevels.put(basePrefix, nestLevel + 1);
-        
-        // Use both nesting level and counter to ensure uniqueness
+
         int counter = temporaries.add(basePrefix) - 1;
         return basePrefix + "_" + nestLevel + "_" + counter;
     }
@@ -59,9 +57,7 @@ public class OptUtils {
     }
 
     public static String toOllirType(Type type) {
-        // Add null check to prevent NullPointerException
         if (type == null) {
-            // Default to void when type is null
             return ".V";
         }
 
@@ -73,9 +69,8 @@ public class OptUtils {
     }
 
     private static String toOllirType(String typeName) {
-        // Add null check for type name as well
         if (typeName == null) {
-            return ".V"; // Default to void for null type name
+            return ".V";
         }
 
         String type = "." + switch (typeName) {
@@ -83,7 +78,7 @@ public class OptUtils {
             case "boolean" -> "bool";
             case "String" -> "String";
             case "void" -> "V";
-            default -> typeName; // Use the type name directly instead of throwing exception
+            default -> typeName;
         };
 
         return type;

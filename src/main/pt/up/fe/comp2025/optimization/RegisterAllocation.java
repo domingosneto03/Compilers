@@ -24,13 +24,12 @@ public class RegisterAllocation {
 
     public OllirResult allocateRegisters() {
         if (!optimize) {
-            return ollirResult; // No register allocation needed
+            return ollirResult;
         }
 
         ClassUnit classUnit = ollirResult.getOllirClass();
         List<Report> reports = new ArrayList<>(ollirResult.getReports());
 
-        // Build CFG for all methods
         classUnit.buildCFGs();
 
         for (Method method : classUnit.getMethods()) {
@@ -47,7 +46,6 @@ public class RegisterAllocation {
             }
         }
 
-        // Always return the modified ollirResult, even with reports
         if (!reports.equals(ollirResult.getReports())) {
             if (reports.size() > ollirResult.getReports().size()) {
                 System.err.println("Register allocation errors occurred:");
@@ -63,7 +61,6 @@ public class RegisterAllocation {
     private void allocateRegistersForMethod(Method method) throws RegisterAllocationException {
         System.out.println("=== Allocating registers for method: " + method.getMethodName() + " ===");
 
-        // Skip allocation for methods with no local variables to allocate
         Set<String> localVariables = getLocalVariablesToAllocate(method);
         if (localVariables.isEmpty()) {
             System.out.println("No local variables to allocate for method " + method.getMethodName());
@@ -71,32 +68,25 @@ public class RegisterAllocation {
             return;
         }
 
-        // Debug: Print original variable table
         System.out.println("Original variable table:");
         for (Map.Entry<String, Descriptor> entry : method.getVarTable().entrySet()) {
             System.out.println("  " + entry.getKey() + " -> register " + entry.getValue().getVirtualReg() +
                     " (scope: " + entry.getValue().getScope() + ")");
         }
 
-        // Step 1: Liveness Analysis
         LivenessAnalysis liveness = new LivenessAnalysis(method);
         liveness.analyze();
 
-        // Step 2: Build Interference Graph
         InterferenceGraph interferenceGraph = new InterferenceGraph(method, liveness);
         interferenceGraph.build();
 
-        // Debug: Print interference info
         System.out.println("Variables for interference graph: " + interferenceGraph.getVariables());
 
-        // Step 3: Graph Coloring
         GraphColoring coloring = new GraphColoring(interferenceGraph, method, maxRegisters);
         Map<String, Integer> allocation = coloring.color();
 
-        // Step 4: Update Variable Table
         updateVarTable(method, allocation);
 
-        // Step 5: Report the allocation
         System.out.println("Final variable table after allocation:");
         for (Map.Entry<String, Descriptor> entry : method.getVarTable().entrySet()) {
             System.out.println("  " + entry.getKey() + " -> register " + entry.getValue().getVirtualReg());
@@ -115,7 +105,6 @@ public class RegisterAllocation {
 
         for (String varName : varTable.keySet()) {
             Descriptor desc = varTable.get(varName);
-            // Include LOCAL variables but exclude 'this' from reallocation
             if (desc.getScope() == VarScope.LOCAL && !"this".equals(varName)) {
                 variables.add(varName);
             }
@@ -133,7 +122,6 @@ public class RegisterAllocation {
 
             if (varTable.containsKey(varName)) {
                 Descriptor descriptor = varTable.get(varName);
-                // Only update LOCAL variables that are not 'this' or parameters
                 if (descriptor.getScope() == VarScope.LOCAL && !"this".equals(varName)) {
                     System.out.println("Updating " + varName + " from register " +
                             descriptor.getVirtualReg() + " to register " + register);
@@ -149,7 +137,6 @@ public class RegisterAllocation {
         }
     }
 
-    // Liveness Analysis Implementation
     private static class LivenessAnalysis {
         private final Method method;
         private final Map<Instruction, Set<String>> defSets;
@@ -169,7 +156,6 @@ public class RegisterAllocation {
         public LivenessAnalysis analyze() {
             if (analyzed) return this;
 
-            // Initialize sets
             for (Instruction inst : method.getInstructions()) {
                 defSets.put(inst, new HashSet<>());
                 useSets.put(inst, new HashSet<>());
@@ -177,13 +163,10 @@ public class RegisterAllocation {
                 liveOuts.put(inst, new HashSet<>());
             }
 
-            // Calculate def and use sets
             calculateDefUseSets();
 
-            // Calculate live-in and live-out sets using iterative algorithm
             calculateLiveInOut();
 
-            // Debug output
             if (System.getProperty("debug.regalloc") != null) {
                 RegisterAllocationUtils.printLivenessAnalysis(method, liveIns, liveOuts, defSets, useSets);
             }
@@ -200,21 +183,18 @@ public class RegisterAllocation {
                 switch (inst.getInstType()) {
                     case ASSIGN:
                         AssignInstruction assign = (AssignInstruction) inst;
-                        // Add destination to def set
                         Element dest = assign.getDest();
                         if (dest instanceof Operand) {
                             String varName = ((Operand) dest).getName();
-                            if (!"this".equals(varName)) { // Exclude 'this'
+                            if (!"this".equals(varName)) {
                                 defs.add(varName);
                             }
                         }
-                        // Add operands from RHS to use set
                         addOperandsToUseSet(assign.getRhs(), uses);
                         break;
 
                     case CALL:
                         CallInstruction call = (CallInstruction) inst;
-                        // Add arguments to use set
                         if (call.getArguments() != null) {
                             for (Element arg : call.getArguments()) {
                                 if (arg instanceof Operand) {
@@ -225,7 +205,6 @@ public class RegisterAllocation {
                                 }
                             }
                         }
-                        // Add caller to use set
                         if (call.getCaller() instanceof Operand) {
                             String varName = ((Operand) call.getCaller()).getName();
                             if (!"this".equals(varName)) {
@@ -259,7 +238,6 @@ public class RegisterAllocation {
                         break;
 
                     default:
-                        // Handle other instruction types if needed
                         break;
                 }
             }
@@ -338,7 +316,6 @@ public class RegisterAllocation {
                     Set<String> oldLiveIn = new HashSet<>(liveIns.get(inst));
                     Set<String> oldLiveOut = new HashSet<>(liveOuts.get(inst));
 
-                    // Calculate live-out: union of live-ins of all successors
                     Set<String> newLiveOut = new HashSet<>();
                     for (Node successor : inst.getSuccessors()) {
                         if (successor instanceof Instruction) {
@@ -346,17 +323,14 @@ public class RegisterAllocation {
                         }
                     }
 
-                    // Calculate live-in: use ∪ (live-out - def)
                     Set<String> newLiveIn = new HashSet<>(useSets.get(inst));
                     Set<String> liveOutMinusDef = new HashSet<>(newLiveOut);
                     liveOutMinusDef.removeAll(defSets.get(inst));
                     newLiveIn.addAll(liveOutMinusDef);
 
-                    // Update sets
                     liveIns.put(inst, newLiveIn);
                     liveOuts.put(inst, newLiveOut);
 
-                    // Check if anything changed
                     if (!oldLiveIn.equals(newLiveIn) || !oldLiveOut.equals(newLiveOut)) {
                         changed = true;
                     }
@@ -377,7 +351,6 @@ public class RegisterAllocation {
         }
     }
 
-    // Interference Graph Implementation
     private static class InterferenceGraph {
         private final Method method;
         private final LivenessAnalysis liveness;
@@ -392,21 +365,16 @@ public class RegisterAllocation {
         }
 
         public InterferenceGraph build() {
-            // Collect all variables (excluding 'this' and parameters that shouldn't be reallocated)
             collectVariables();
 
-            // Initialize adjacency list
             for (String var : variables) {
                 adjacencyList.put(var, new HashSet<>());
             }
 
-            // Build interference edges
             for (Instruction inst : method.getInstructions()) {
-                // Use the union of def and live-out sets (to handle dead variables)
                 Set<String> interferingVars = new HashSet<>(liveness.getDef(inst));
                 interferingVars.addAll(liveness.getLiveOut(inst));
 
-                // Add interference edges between all pairs of interfering variables
                 List<String> varList = new ArrayList<>(interferingVars);
                 for (int i = 0; i < varList.size(); i++) {
                     for (int j = i + 1; j < varList.size(); j++) {
@@ -421,7 +389,6 @@ public class RegisterAllocation {
                 }
             }
 
-            // Debug output
             if (System.getProperty("debug.regalloc") != null) {
                 RegisterAllocationUtils.printInterferenceGraph(adjacencyList);
             }
@@ -434,13 +401,11 @@ public class RegisterAllocation {
 
             for (String varName : varTable.keySet()) {
                 Descriptor desc = varTable.get(varName);
-                // Include LOCAL variables but exclude 'this' from reallocation
                 if (desc.getScope() == VarScope.LOCAL && !"this".equals(varName)) {
                     variables.add(varName);
                 }
             }
 
-            System.out.println("Variables to allocate registers for (LOCAL only, excluding 'this'): " + variables);
         }
 
         public Set<String> getVariables() {
@@ -481,18 +446,16 @@ public class RegisterAllocation {
         }
 
         public Map<String, Integer> color() throws RegisterAllocationException {
-            // If no variables to color, return empty allocation
             if (graph.getVariables().isEmpty()) {
                 return new HashMap<>();
             }
 
-            // Store original adjacency list before we start removing nodes
+            // Store original adjacency list
             Map<String, Set<String>> originalAdjacencyList = new HashMap<>();
             for (String var : graph.getVariables()) {
                 originalAdjacencyList.put(var, new HashSet<>(graph.getNeighbors(var)));
             }
 
-            // Phase 1: Remove nodes with degree < k
             while (!graph.getVariables().isEmpty()) {
                 String nodeToRemove = findRemovableNode();
                 if (nodeToRemove == null) {
@@ -505,10 +468,8 @@ public class RegisterAllocation {
                 graph.removeVariable(nodeToRemove);
             }
 
-            // Phase 2: Color nodes in reverse order
             Map<String, Integer> allocation = new HashMap<>();
 
-            // Reserve registers for 'this' and parameters
             int nextAvailableRegister = reserveParameterRegisters();
 
             while (!removalStack.isEmpty()) {
@@ -540,7 +501,6 @@ public class RegisterAllocation {
             int nextRegister = 0;
             Map<String, Descriptor> varTable = method.getVarTable();
 
-            // Reserve registers for parameters and 'this' - they keep their original assignments
             Set<Integer> reservedRegisters = new HashSet<>();
             for (Map.Entry<String, Descriptor> entry : varTable.entrySet()) {
                 Descriptor desc = entry.getValue();
@@ -549,7 +509,6 @@ public class RegisterAllocation {
                 }
             }
 
-            // Start assigning from the next available register
             while (reservedRegisters.contains(nextRegister)) {
                 nextRegister++;
             }
@@ -561,14 +520,12 @@ public class RegisterAllocation {
 
         private int assignColor(String variable, Map<String, Integer> allocation,
                                 int startRegister, Map<String, Set<String>> originalAdjacencyList) {
-            // Find neighbors and their colors
             Set<String> neighbors = originalAdjacencyList.getOrDefault(variable, Collections.emptySet());
             Set<Integer> usedColors = neighbors.stream()
                     .filter(allocation::containsKey)
                     .map(allocation::get)
                     .collect(Collectors.toSet());
 
-            // Also avoid colors used by parameters and 'this'
             Map<String, Descriptor> varTable = method.getVarTable();
             for (Map.Entry<String, Descriptor> entry : varTable.entrySet()) {
                 Descriptor desc = entry.getValue();
@@ -577,7 +534,6 @@ public class RegisterAllocation {
                 }
             }
 
-            // Find the lowest available color starting from startRegister
             int color = startRegister;
             while (usedColors.contains(color)) {
                 color++;

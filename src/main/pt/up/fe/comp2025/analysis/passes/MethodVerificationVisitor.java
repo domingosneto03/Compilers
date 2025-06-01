@@ -24,7 +24,6 @@ public class MethodVerificationVisitor extends AnalysisVisitor {
     private Void visitMethodDecl(JmmNode methodDecl, SymbolTable table) {
         String name = methodDecl.get("name");
         currentMethod = name.equals("args") ? "main" : name;
-        //System.out.println("[DEBUG] MethoodVerificationCheck — entering method: " + currentMethod);
         return null;
     }
 
@@ -33,7 +32,6 @@ public class MethodVerificationVisitor extends AnalysisVisitor {
 
         TypeUtils typeUtils = new TypeUtils(table);
 
-        // Safely get the caller type
         Type callerType;
         try {
             callerType = typeUtils.getExprType(callNode.getChild(0), currentMethod);
@@ -42,7 +40,6 @@ public class MethodVerificationVisitor extends AnalysisVisitor {
             return null;
         }
 
-        // If method is not declared locally and might be from import or superclass, assume valid and skip
         boolean declaredLocally = table.getMethods().contains(methodName);
         boolean fromImport = table.getImports().stream().anyMatch(imp -> imp.endsWith("." + callerType.getName()) || imp.equals(callerType.getName()));
         boolean fromSuperclass = table.getSuper() != null && !table.getSuper().isEmpty();

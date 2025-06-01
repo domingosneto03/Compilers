@@ -50,11 +50,9 @@ public class RegisterAllocationUtils {
     public static boolean validateAllocation(Method method, Map<String, Integer> allocation) {
         System.out.println("=== Validating Register Allocation ===");
 
-        // Check that all LOCAL variables (excluding 'this') that should be allocated have been assigned
         Map<String, Descriptor> varTable = method.getVarTable();
         for (String varName : varTable.keySet()) {
             Descriptor desc = varTable.get(varName);
-            // Only validate LOCAL variables that are not 'this'
             if (desc.getScope() == VarScope.LOCAL && !"this".equals(varName)) {
                 if (!allocation.containsKey(varName)) {
                     System.err.println("ERROR: Local variable " + varName + " not allocated a register");
@@ -72,7 +70,7 @@ public class RegisterAllocationUtils {
             }
         }
 
-        // Check that registers are properly assigned (no conflicts with reserved registers)
+        // Check that registers are properly assigned
         Set<Integer> reservedRegisters = new HashSet<>();
         for (Map.Entry<String, Descriptor> entry : varTable.entrySet()) {
             Descriptor desc = entry.getValue();
@@ -208,7 +206,7 @@ public class RegisterAllocationUtils {
         report.append("Register Allocation Report for ").append(method.getMethodName()).append(":\n");
         report.append("----------------------------------------\n");
 
-        // Sort by register number for cleaner output
+        // Sort by register number
         Map<Integer, List<String>> registerToVars = new TreeMap<>();
         for (Map.Entry<String, Integer> entry : allocation.entrySet()) {
             int register = entry.getValue();

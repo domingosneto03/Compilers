@@ -103,7 +103,7 @@ public class JasminGenerator {
                 case GTE -> "if_icmpge";
                 case EQ -> "if_icmpeq";
                 case NEQ -> "if_icmpne";
-                default -> "if_icmplt"; // fallback
+                default -> "if_icmplt";
             };
             code.append(branchInst).append(" ").append(label).append(NL);
         } else if (condition instanceof SingleOpInstruction) {
@@ -112,10 +112,8 @@ public class JasminGenerator {
             // Load single operand
             code.append(apply(singleOp.getSingleOperand()));
 
-            // For single operand, assume it's a boolean check
             code.append("ifne ").append(label).append(NL);
         } else {
-            // Fallback: load all operands and use simple branch
             for (Element operand : condBranch.getOperands()) {
                 code.append(apply((TreeNode) operand));
             }
@@ -147,7 +145,7 @@ public class JasminGenerator {
         // Get method name
         var methodName = ((LiteralElement) invoke.getMethodName()).getLiteral().replace("\"", "");
 
-        // Get class name from the caller (should be a class reference)
+        // Get class name from the caller
         String className;
         if (invoke.getCaller() instanceof Operand) {
             className = ((Operand) invoke.getCaller()).getName();
@@ -207,7 +205,7 @@ public class JasminGenerator {
         }
         code.append(NL);
 
-        // Generate fields if any
+        // Generate fields
         for (var field : classUnit.getFields()) {
             var fieldType = types.getJasminType(field.getFieldType());
             code.append(".field public ").append(field.getFieldName()).append(" ").append(fieldType).append(NL);
@@ -233,9 +231,6 @@ public class JasminGenerator {
         // generate code for all other methods
         for (var method : ollirResult.getOllirClass().getMethods()) {
 
-            // Ignore constructor, since there is always one constructor
-            // that receives no arguments, and has been already added
-            // previously
             if (method.isConstructMethod()) {
                 continue;
             }
@@ -252,10 +247,8 @@ public class JasminGenerator {
 
         var code = new StringBuilder();
 
-        // Access modifier (public, private, etc.)
         var modifier = types.getModifier(method.getMethodAccessModifier());
 
-        // Static modifier
         if (method.isStaticMethod()) {
             modifier += "static ";
         }
@@ -269,10 +262,8 @@ public class JasminGenerator {
 
         var returnType = types.getJasminType(method.getReturnType());
 
-        // Generate all instructions first to calculate limits properly
         var methodCode = new StringBuilder();
         for (var inst : method.getInstructions()) {
-            // Handle labels
             for (String label : method.getLabels(inst)) {
                 methodCode.append(label).append(":").append(NL);
             }
@@ -282,11 +273,9 @@ public class JasminGenerator {
             methodCode.append(instCode);
         }
 
-        // Calculate limits AFTER generating code
         int stackLimit = calculateStackLimit(method);
         int localsLimit = calculateLocalsLimit(method);
 
-        // Emit method header
         code.append(".method ").append(modifier)
                 .append(methodName)
                 .append("(").append(params).append(")").append(returnType).append(NL);
@@ -294,10 +283,8 @@ public class JasminGenerator {
         code.append(TAB).append(".limit stack ").append(stackLimit).append(NL);
         code.append(TAB).append(".limit locals ").append(localsLimit).append(NL);
 
-        // Add method instructions
         code.append(methodCode);
 
-        // End method
         code.append(".end method\n");
 
         currentMethod = null;
@@ -306,14 +293,13 @@ public class JasminGenerator {
     }
 
     private int calculateStackLimit(Method method) {
-        int maxStack = 1; // Start with minimum
+        int maxStack = 1;
         
         for (Instruction instr : method.getInstructions()) {
             int stackUsage = calculateInstructionStackUsage(instr);
             maxStack = Math.max(maxStack, stackUsage);
         }
-        
-        // Add some safety margin but keep reasonable
+
         return Math.min(maxStack + 2, 10);
     }
 
@@ -326,10 +312,8 @@ public class JasminGenerator {
                 AssignInstruction assign = (AssignInstruction) instr;
                 if (assign.getDest() instanceof ArrayOperand) {
                     ArrayOperand arrayDest = (ArrayOperand) assign.getDest();
-                    // Array assignment: array_ref + indices + value
                     return 2 + arrayDest.getIndexOperands().size();
                 }
-                // Regular assignment: just the RHS stack usage
                 return calculateInstructionStackUsage(assign.getRhs());
                 
             case CALL:
@@ -344,35 +328,32 @@ public class JasminGenerator {
                 } else if (call instanceof NewInstruction) {
                     NewInstruction newInst = (NewInstruction) call;
                     if (newInst.getReturnType().toString().endsWith("[]")) {
-                        // Array creation: size argument
-                        return 2; // size + newarray
+                        return 2;
                     } else {
-                        // Object creation: "new" + "dup" = 2 stack slots
                         return 2;
                     }
                 } else if (call instanceof ArrayLengthInstruction) {
-                    return 1; // array reference
+                    return 1;
                 }
-                return 2; // Default conservative
+                return 2;
                 
             case BINARYOPER:
                 BinaryOpInstruction binOp = (BinaryOpInstruction) instr;
-                // Binary operations need both operands on stack
                 if (binOp.getOperation().getOpType().toString().contains("LT") ||
                     binOp.getOperation().getOpType().toString().contains("GT") ||
                     binOp.getOperation().getOpType().toString().contains("EQ")) {
-                    return 2; // Comparison operations need 2 values
+                    return 2;
                 }
-                return 2; // Most binary ops need 2 operands
+                return 2;
                 
             case UNARYOPER:
-                return 1; // Unary operations need 1 operand
+                return 1;
                 
             case GETFIELD:
-                return 1; // object reference
+                return 1;
                 
             case PUTFIELD:
-                return 2; // object reference + value
+                return 2;
                 
             case RETURN:
                 ReturnInstruction ret = (ReturnInstruction) instr;
@@ -386,18 +367,18 @@ public class JasminGenerator {
                 return 0;
                 
             case GOTO:
-                return 0; // goto doesn't use stack
+                return 0;
                 
             case NOPER:
-                return 1; // single operand
+                return 1;
             default:
-                return 2; // conservative default
+                return 2;
         }
     }
 
     private int calculateLocalsLimit(Method method) {
         if (method.getVarTable().isEmpty()) {
-            return method.isStaticMethod() ? 1 : 1; // at least space for 'this' if not static
+            return method.isStaticMethod() ? 1 : 1;
         }
 
         return method.getVarTable().values().stream()
@@ -414,10 +395,9 @@ public class JasminGenerator {
             ArrayOperand arrayDest = (ArrayOperand) assign.getDest();
 
             // Load array reference directly using the array variable name
-            // This avoids infinite recursion by not calling apply() on the ArrayOperand itself
             var arrayReg = currentMethod.getVarTable().get(arrayDest.getName());
             
-            // Load the array reference (always an object reference)
+            // Load the array reference
             int arrayRegNum = arrayReg.getVirtualReg();
             if (arrayRegNum <= 3) {
                 code.append("aload_").append(arrayRegNum).append(NL);
@@ -458,18 +438,14 @@ public class JasminGenerator {
         var typeCode = types.getJasminType(lhs.getType());
         int regNum = reg.getVirtualReg();
 
-        // Check for iinc optimization: detect pattern where i = tmp and tmp = i + constant
         if (typeCode.equals("I") && assign.getRhs() instanceof SingleOpInstruction) {
             SingleOpInstruction singleOp = (SingleOpInstruction) assign.getRhs();
             
             if (singleOp.getSingleOperand() instanceof Operand) {
                 Operand rhsOperand = (Operand) singleOp.getSingleOperand();
                 String tempVarName = rhsOperand.getName();
-                
-                // Check if this is a temporary variable (starts with "tmp")
+
                 if (tempVarName.startsWith("tmp")) {
-                    // Look for the previous instruction that defined this temporary
-                    // We need to find the BinaryOpInstruction that assigned to this temp
                     AssignInstruction tempDefining = findPreviousAssignmentForTemp(tempVarName);
                     
                     if (tempDefining != null && tempDefining.getRhs() instanceof BinaryOpInstruction) {
@@ -478,8 +454,7 @@ public class JasminGenerator {
                         if (binOp.getOperation().getOpType().name().equals("ADD")) {
                             var leftOperand = binOp.getLeftOperand();
                             var rightOperand = binOp.getRightOperand();
-                            
-                            // Check if one operand is the target variable and the other is a constant
+
                             boolean leftIsTarget = (leftOperand instanceof Operand) && 
                                                  ((Operand) leftOperand).getName().equals(operand.getName());
                             boolean rightIsTarget = (rightOperand instanceof Operand) && 
@@ -495,13 +470,11 @@ public class JasminGenerator {
                             if (constantOperand != null) {
                                 try {
                                     int increment = Integer.parseInt(constantOperand.getLiteral());
-                                    // Use iinc for small increments (-128 to 127)
                                     if (increment >= -128 && increment <= 127) {
                                         code.append("iinc ").append(regNum).append(" ").append(increment).append(NL);
                                         return code.toString();
                                     }
                                 } catch (NumberFormatException e) {
-                                    // Not a valid integer, fall through to regular assignment
                                 }
                             }
                         }
@@ -510,13 +483,11 @@ public class JasminGenerator {
             }
         }
 
-        // Regular assignment (not optimizable with iinc)
-        // generate code for loading what's on the right
+        // Regular assignment
         code.append(apply(assign.getRhs()));
 
         String storeInst;
 
-        // Use optimized store instructions for registers 0-3
         if (typeCode.equals("I") || typeCode.equals("Z")) {
             if (regNum <= 3) {
                 storeInst = "istore_" + regNum;
@@ -543,7 +514,7 @@ public class JasminGenerator {
     private String generateLiteral(LiteralElement literal) {
         String value = literal.getLiteral();
 
-        // Handle integer literals with optimized instructions
+        // Handle integer literals
         try {
             int intValue = Integer.parseInt(value);
             if (intValue == -1) {
@@ -570,7 +541,6 @@ public class JasminGenerator {
             var code = new StringBuilder();
 
             // Load array reference directly using the array variable name
-            // This avoids infinite recursion by not calling apply() on the ArrayOperand itself
             var arrayReg = currentMethod.getVarTable().get(arrayOp.getName());
             var arrayTypeCode = types.getJasminType(arrayOp.getType());
             
@@ -605,7 +575,6 @@ public class JasminGenerator {
         String loadInst;
         int regNum = reg.getVirtualReg();
 
-        // Use optimized load instructions
         if (typeCode.equals("I") || typeCode.equals("Z")) {
             if (regNum <= 3) {
                 loadInst = "iload_" + regNum;
@@ -653,7 +622,6 @@ public class JasminGenerator {
                 yield "iand";
             }
             case LTH -> {
-                // Check for comparison with zero optimization
                 var leftOperand = binaryOp.getLeftOperand();
                 var rightOperand = binaryOp.getRightOperand();
                 
@@ -664,7 +632,6 @@ public class JasminGenerator {
                 String endLabel = "LT_END_" + System.nanoTime();
                 
                 if (rightIsZero && !leftIsZero) {
-                    // variable < 0 -> use iflt
                     code.append(apply(leftOperand));
                     yield """
                     iflt %s
@@ -675,7 +642,6 @@ public class JasminGenerator {
                     %s:
                     """.formatted(trueLabel, endLabel, trueLabel, endLabel);
                 } else if (leftIsZero && !rightIsZero) {
-                    // 0 < variable -> equivalent to variable > 0, use ifgt
                     code.append(apply(rightOperand));
                     yield """
                     ifgt %s
@@ -686,7 +652,6 @@ public class JasminGenerator {
                     %s:
                     """.formatted(trueLabel, endLabel, trueLabel, endLabel);
                 } else {
-                    // Default case: use if_icmplt
                     code.append(apply(leftOperand));
                     code.append(apply(rightOperand));
                     yield """
@@ -705,7 +670,7 @@ public class JasminGenerator {
         if (!binaryOp.getOperation().getOpType().name().equals("LTH")) {
             code.append(op).append(NL);
         } else {
-            code.append(op); // already has newlines in multi-line case
+            code.append(op);
         }
 
         return code.toString();
@@ -742,7 +707,6 @@ public class JasminGenerator {
     private String generateInvokeVirtual(InvokeVirtualInstruction invoke) {
         var code = new StringBuilder();
 
-        // Load the object being called on (e.g., 'this' or some object reference)
         code.append(apply(invoke.getCaller()));
 
         // Load all method arguments
@@ -755,7 +719,7 @@ public class JasminGenerator {
         // Determine method name
         var methodName = ((LiteralElement) invoke.getMethodName()).getLiteral().replace("\"", "");
 
-        // Class where method is defined — assume current class unless it's a field
+        // Class where method is defined
         var className = ollirResult.getOllirClass().getClassName();
 
         // Build method descriptor
@@ -780,7 +744,6 @@ public class JasminGenerator {
     private String generateInvokeSpecial(InvokeSpecialInstruction invoke) {
         var code = new StringBuilder();
 
-        // Load the object being called on (usually 'this' for constructors)
         code.append(apply(invoke.getCaller()));
 
         // Load all method arguments
@@ -793,7 +756,6 @@ public class JasminGenerator {
         // Determine method name
         var methodName = ((LiteralElement) invoke.getMethodName()).getLiteral().replace("\"", "");
 
-        // For constructor calls, the class name comes from the caller's type
         String className;
         if ("<init>".equals(methodName)) {
             var callerType = invoke.getCaller().getType();
@@ -828,19 +790,17 @@ public class JasminGenerator {
     private String generateNew(NewInstruction newInst) {
         var code = new StringBuilder();
 
-        // Get the return type which tells us what we're creating
+        // Get the return type
         var returnType = newInst.getReturnType();
-        
-        // Check if this is an array creation by examining the return type
-        // Array types will have the form "INT32[]", "BOOLEAN[]", etc.
+
         if (returnType.toString().endsWith("[]")) {
             // This is array creation
             if (!newInst.getArguments().isEmpty()) {
-                // Load the array size (first and only argument)
+                // Load the array size
                 code.append(apply((TreeNode) newInst.getArguments().get(0)));
             }
 
-            // Generate appropriate newarray instruction based on element type
+            // Generate appropriate newarray
             String typeStr = returnType.toString();
             if (typeStr.startsWith("INT32") || typeStr.contains("int")) {
                 code.append("newarray int").append(NL);
@@ -864,7 +824,6 @@ public class JasminGenerator {
     }
 
     private String generateCall(CallInstruction call) {
-        // This method handles generic calls and delegates to specific methods
         if (call instanceof InvokeVirtualInstruction) {
             return generateInvokeVirtual((InvokeVirtualInstruction) call);
         } else if (call instanceof InvokeSpecialInstruction) {
@@ -880,9 +839,7 @@ public class JasminGenerator {
 
     private String generateArrayLength(ArrayLengthInstruction arrayLength) {
         var code = new StringBuilder();
-        
-        // Load the array reference onto the stack
-        // The array operand is stored as the caller in ArrayLengthInstruction
+
         code.append(apply(arrayLength.getCaller()));
         
         // Generate the arraylength instruction
@@ -894,17 +851,15 @@ public class JasminGenerator {
     private String generateGetField(GetFieldInstruction getField) {
         var code = new StringBuilder();
 
-        // Load the object reference (usually 'this')
-        // The object is the first operand according to FieldInstruction
         code.append(apply(getField.getObject()));
 
-        // Get field name from the second operand (field operand)
+        // Get field name
         String fieldName = getField.getField().getName();
 
-        // Get field type from the instruction's field type
+        // Get field type
         String fieldType = types.getJasminType(getField.getFieldType());
 
-        // Get class name (usually current class)
+        // Get class name
         String className = ollirResult.getOllirClass().getClassName();
 
         code.append("getfield ")
@@ -919,24 +874,18 @@ public class JasminGenerator {
     private String generatePutField(PutFieldInstruction putField) {
         var code = new StringBuilder();
 
-        // Load the object reference (usually 'this')
-        // The object is the first operand according to FieldInstruction
         code.append(apply(putField.getObject()));
 
-        // Load the value to store (third operand - additional operands beyond object and field)
+        // Load the value to store
         List<Element> operands = putField.getOperands();
         if (operands.size() > 2) {
-            // The value to store should be the third operand
             code.append(apply((TreeNode) operands.get(2)));
         }
 
-        // Get field name from the second operand (field operand)
         String fieldName = putField.getField().getName();
 
-        // Get field type from the instruction's field type
         String fieldType = types.getJasminType(putField.getFieldType());
 
-        // Get class name (usually current class)
         String className = ollirResult.getOllirClass().getClassName();
 
         code.append("putfield ")
@@ -957,8 +906,6 @@ public class JasminGenerator {
         // Handle the unary operation
         var op = switch (unaryOp.getOperation().getOpType()) {
             case NOTB -> {
-                // Boolean NOT operation: flip 0 to 1 and 1 to 0
-                // We can use iconst_1 followed by ixor to flip the boolean value
                 yield "iconst_1" + NL + "ixor";
             }
             default -> throw new NotImplementedException(unaryOp.getOperation().getOpType());
@@ -977,8 +924,7 @@ public class JasminGenerator {
      */
     private AssignInstruction findPreviousAssignmentForTemp(String tempVarName) {
         List<Instruction> instructions = currentMethod.getInstructions();
-        
-        // Look through the instructions in reverse order to find the most recent assignment
+
         for (int i = instructions.size() - 1; i >= 0; i--) {
             Instruction inst = instructions.get(i);
             

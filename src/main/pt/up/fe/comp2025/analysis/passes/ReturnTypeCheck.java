@@ -31,7 +31,6 @@ public class ReturnTypeCheck extends AnalysisVisitor {
         currentMethod = name.equals("args") ? "main" : name;
         this.typeUtils = new TypeUtils(table);
 
-        // Verificar se método não-void tem pelo menos um return
         Type returnType = table.getReturnType(currentMethod);
         if (returnType != null && !returnType.getName().equals("void")) {
             boolean hasReturn = hasReturnStatement(methodDecl);
@@ -53,14 +52,12 @@ public class ReturnTypeCheck extends AnalysisVisitor {
         Type expectedReturnType = table.getReturnType(currentMethod);
 
         if (expectedReturnType == null) {
-            // Método não encontrado na tabela de símbolos - outro pass deve reportar este erro
             return null;
         }
 
         boolean hasExpression = returnStmt.getNumChildren() > 0;
 
         if (expectedReturnType.getName().equals("void")) {
-            // Método void não deve retornar valor
             if (hasExpression) {
                 addReport(Report.newError(
                         Stage.SEMANTIC,
@@ -71,7 +68,6 @@ public class ReturnTypeCheck extends AnalysisVisitor {
                 ));
             }
         } else {
-            // Método não-void deve retornar valor
             if (!hasExpression) {
                 addReport(Report.newError(
                         Stage.SEMANTIC,
@@ -112,9 +108,6 @@ public class ReturnTypeCheck extends AnalysisVisitor {
         return null;
     }
 
-    /**
-     * Verifica se um método tem pelo menos um statement de return.
-     */
     private boolean hasReturnStatement(JmmNode methodDecl) {
         return hasReturnStatementRecursive(methodDecl);
     }
@@ -178,7 +171,7 @@ public class ReturnTypeCheck extends AnalysisVisitor {
                 .anyMatch(imp -> imp.endsWith("." + expectedClassName) || imp.equals(expectedClassName));
 
         if (actualIsImported && expectedIsImported) {
-            return true; // Assumir compatibilidade para classes importadas
+            return true;
         }
 
         return false;

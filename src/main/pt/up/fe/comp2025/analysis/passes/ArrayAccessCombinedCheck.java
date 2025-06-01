@@ -35,12 +35,10 @@ public class ArrayAccessCombinedCheck extends AnalysisVisitor {
     private Void visitMethodDecl(JmmNode methodDecl, SymbolTable table) {
         String name = methodDecl.get("name");
         currentMethod = name.equals("args") ? "main" : name;
-        //System.out.println("[DEBUG] ArrayAcessCombinedCheck — entering method: " + currentMethod);
         return null;
     }
 
     private Void visitArrayAccessExpr(JmmNode arrayAccessExpr, SymbolTable table) {
-        // If the node is incomplete (e.g. missing the right-hand side index), skip checks.
         if (arrayAccessExpr.getNumChildren() < 2) {
             return null;
         }
@@ -84,7 +82,6 @@ public class ArrayAccessCombinedCheck extends AnalysisVisitor {
                             null));
                 }
             } catch (NumberFormatException e) {
-                // Defensive: just in case the literal is malformed
                 String message = "Malformed integer literal in array index: " + valueStr;
                 addReport(Report.newError(Stage.SEMANTIC,
                         indexExpr.getLine(),

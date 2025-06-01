@@ -31,7 +31,6 @@ public class ArrayArithmeticCheck extends AnalysisVisitor {
     private Void visitMethodDecl(JmmNode methodDecl, SymbolTable table) {
         String name = methodDecl.get("name");
         currentMethod = name.equals("args") ? "main" : name;
-        //System.out.println("[DEBUG] ArrayArithmeticCheck — entering method: " + currentMethod);
         return null;
     }
 

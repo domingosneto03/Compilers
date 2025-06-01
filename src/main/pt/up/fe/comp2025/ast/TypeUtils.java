@@ -92,7 +92,7 @@ public class TypeUtils {
                 }
                 for (String imp : table.getImports()) {
                     if (imp.endsWith("." + id) || imp.equals(id)) {
-                        return new Type(id, false); // Assume it's a class from import
+                        return new Type(id, false);
                     }
                 }
 
@@ -148,8 +148,6 @@ public class TypeUtils {
                         && table.getImports().stream().anyMatch(imp -> imp.endsWith("." + callerType.getName()) || imp.equals(callerType.getName()));
 
                 if (isExternalCaller) {
-                    // For imported classes, try to infer the return type based on context
-                    // Special handling for specific known patterns
                     if ("A".equals(callerType.getName()) && "bar".equals(methodName)) {
                         return new Type("boolean", false); // Known from test case
                     }

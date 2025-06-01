@@ -39,8 +39,6 @@ public class VarargsCheck extends AnalysisVisitor {
                     "Only one varargs parameter is allowed per method.", null));
         }
 
-        // ⚠️ IMPORTANTE: tipo de retorno é analisado por getChild ou atributo?
-        // Se o tipo de retorno for um nó filho do método:
         List<JmmNode> typeNodes = methodDecl.getChildren(Kind.VAR_ARGS);
         if (!typeNodes.isEmpty()) {
             addReport(Report.newError(Stage.SEMANTIC,

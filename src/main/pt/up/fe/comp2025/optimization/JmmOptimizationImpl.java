@@ -12,10 +12,8 @@ public class JmmOptimizationImpl implements JmmOptimization {
     @Override
     public OllirResult toOllir(JmmSemanticsResult semanticsResult) {
 
-        // Create visitor that will generate the OLLIR code
         var visitor = new OllirGeneratorVisitor(semanticsResult.getSymbolTable());
 
-        // Visit the AST and obtain OLLIR code
         var ollirCode = visitor.visit(semanticsResult.getRootNode());
 
         //System.out.println("\nOLLIR:\n\n" + ollirCode);
@@ -27,7 +25,6 @@ public class JmmOptimizationImpl implements JmmOptimization {
     public JmmSemanticsResult optimize(JmmSemanticsResult semanticsResult) {
         var config = semanticsResult.getConfig();
 
-        // Check if optimizations are enabled
         boolean optimizeEnabled = ConfigOptions.getOptimize(config);
 
         System.out.println("Optimization flag (-o) enabled: " + optimizeEnabled);
@@ -41,22 +38,19 @@ public class JmmOptimizationImpl implements JmmOptimization {
 
         boolean globalChanged;
         int iterations = 0;
-        
-        // Continue until no more changes are needed
+
         do {
             globalChanged = false;
             iterations++;
             
             System.out.println("--- Optimization iteration " + iterations + " ---");
 
-            // Apply constant propagation CAREFULLY
             ConstantPropagationVisitor propagation = new ConstantPropagationVisitor(table);
             propagation.visit(root);
             boolean propagationChanged = propagation.didChange();
             globalChanged |= propagationChanged;
             System.out.println("Constant propagation changed: " + propagationChanged);
 
-            // Apply constant folding (this was working)
             ConstantFoldingVisitor folder = new ConstantFoldingVisitor(table);
             folder.visit(root);
             boolean foldingChanged = folder.didChange();

@@ -25,8 +25,6 @@ public class ConstantFoldingVisitor extends PostorderJmmVisitor<String, Boolean>
     }
 
     private Boolean visitBinaryExpr(JmmNode node, String dummy) {
-        // CRUCIAL: Visit children first to ensure folding follows precedence
-        // Example: a = 3 + 2 * 4 -> a = 3 + 8 -> a = 11
         changed |= visit(node.getChild(0)) || visit(node.getChild(1));
 
         var left = node.getChild(0);
@@ -46,7 +44,7 @@ public class ConstantFoldingVisitor extends PostorderJmmVisitor<String, Boolean>
             return foldBooleanBinaryExpr(node, left, right, op);
         }
 
-        // Handle comparisons (int < int -> boolean)
+        // Handle comparisons
         if (left.getKind().equals("IntegerLiteral") && right.getKind().equals("IntegerLiteral") &&
                 (op.equals("<") || op.equals(">") || op.equals("<=") || op.equals(">=") || op.equals("==") || op.equals("!="))) {
             return foldComparisonExpr(node, left, right, op);
@@ -64,7 +62,7 @@ public class ConstantFoldingVisitor extends PostorderJmmVisitor<String, Boolean>
 
         System.out.println("Visiting UnaryExpr: " + op);
 
-        // Handle boolean negation: !true -> false, !false -> true
+        // Handle boolean negation
         if (op.equals("!") && (operand.getKind().equals("BooleanTrue") || operand.getKind().equals("BooleanFalse"))) {
             boolean value = operand.getKind().equals("BooleanTrue");
             boolean result = !value;
@@ -90,7 +88,7 @@ public class ConstantFoldingVisitor extends PostorderJmmVisitor<String, Boolean>
             case "+" -> lhs + rhs;
             case "-" -> lhs - rhs;
             case "*" -> lhs * rhs;
-            case "/" -> (rhs != 0) ? lhs / rhs : null; // Avoid division by zero
+            case "/" -> (rhs != 0) ? lhs / rhs : null;
             default -> null;
         };
 

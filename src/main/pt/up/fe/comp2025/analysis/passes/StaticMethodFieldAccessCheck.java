@@ -30,9 +30,7 @@ public class StaticMethodFieldAccessCheck extends AnalysisVisitor {
     private Void visitMethodDecl(JmmNode methodDecl, SymbolTable table) {
         String name = methodDecl.get("name");
         currentMethod = name.equals("args") ? "main" : name;
-        
-        // In this codebase, static methods are identified as "main" method
-        // Based on the pattern seen throughout the codebase
+
         isCurrentMethodStatic = "main".equals(currentMethod);
         
         return null;

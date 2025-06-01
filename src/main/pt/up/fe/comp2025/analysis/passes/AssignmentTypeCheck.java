@@ -25,7 +25,6 @@ public class AssignmentTypeCheck extends AnalysisVisitor {
     private Void visitMethodDecl(JmmNode methodDecl, SymbolTable table) {
         String name = methodDecl.get("name");
         currentMethod = name.equals("args") ? "main" : name;
-        //System.out.println("[DEBUG] AssignmentTypeCheck — entering method: " + currentMethod);
         return null;
     }
 
@@ -195,7 +194,6 @@ public class AssignmentTypeCheck extends AnalysisVisitor {
             return true; // Assume imported types can be compatible
         }
 
-        // No compatibility found
         return false;
     }
 

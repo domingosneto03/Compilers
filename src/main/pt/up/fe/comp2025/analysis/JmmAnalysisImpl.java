@@ -74,8 +74,6 @@ public class JmmAnalysisImpl implements JmmAnalysis {
 
         var reports = new ArrayList<Report>();
 
-        // This is a simple implementation that assumes all passes are implemented as visitors, each one making a full visit of the AST.
-        // There are other implementations that reduce the number of full AST visits, this is not required for the work, but a nice challenge if you want to try.
         for (var analysisVisitor : analysisVisitors) {
             try {
                 var passReports = analysisVisitor.analyze(rootNode, table);
@@ -86,7 +84,6 @@ public class JmmAnalysisImpl implements JmmAnalysis {
 
                 reports.addAll(passReports);
 
-                // Return early in case of error report
                 if (hasSymbolTableErrors) {
                     System.out.println("Found errors: " + reports);
                     return new JmmSemanticsResult(semanticsResult, reports);

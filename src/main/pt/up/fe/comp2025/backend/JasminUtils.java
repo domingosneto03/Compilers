@@ -16,7 +16,6 @@ public class JasminUtils {
     private final OllirResult ollirResult;
 
     public JasminUtils(OllirResult ollirResult) {
-        // Can be useful to have if you expand this class with more methods
         this.ollirResult = ollirResult;
     }
 
@@ -88,7 +87,6 @@ public class JasminUtils {
             }
         }
 
-        // Fallback
         return "Ljava/lang/Object;";
     }
 
@@ -121,18 +119,15 @@ public class JasminUtils {
             };
         }
 
-        // Fallback
         return "Ljava/lang/Object;";
     }
 
     private String extractClassName(String typeStr) {
-        // Remove common prefixes and suffixes
         typeStr = typeStr.replaceAll("^.*\\.", "")  // Remove package prefixes
                 .replaceAll("\\..*$", "")  // Remove suffixes
                 .replaceAll("^L", "")      // Remove L prefix
                 .replaceAll(";$", "");     // Remove ; suffix
 
-        // Extract the first capitalized word (class name convention)
         String[] parts = typeStr.split("\\s+|\\.|:");
         for (String part : parts) {
             if (part.length() > 0 && Character.isUpperCase(part.charAt(0)) && part.matches("[A-Za-z0-9_]+")) {

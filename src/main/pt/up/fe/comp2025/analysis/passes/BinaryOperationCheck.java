@@ -29,7 +29,6 @@ public class BinaryOperationCheck extends AnalysisVisitor {
     private Void visitMethodDecl(JmmNode methodDecl, SymbolTable table) {
         String name = methodDecl.get("name");
         currentMethod = name.equals("args") ? "main" : name;
-        //System.out.println("[DEBUG] BinaryOperationCheck — entering method: " + currentMethod);
         return null;
     }
 
@@ -40,14 +39,10 @@ public class BinaryOperationCheck extends AnalysisVisitor {
         if ("*".equals(op) || "/".equals(op) || "+".equals(op) || "-".equals(op)) {
             // Instantiate TypeUtils with the symbol table.
             TypeUtils typeUtils = new TypeUtils(table);
-            // The binary expression is assumed to have two children:
-            // Child 0 is the left operand, and child 1 is the right operand.
             JmmNode leftOperand = binaryExpr.getChild(0);
             JmmNode rightOperand = binaryExpr.getChild(1);
-            // Retrieve the types using TypeUtils in the context of the current method.
             Type leftType = typeUtils.getExprType(leftOperand, currentMethod);
             Type rightType = typeUtils.getExprType(rightOperand, currentMethod);
-            // For arithmetic operations, both operands must be of type int (and not arrays).
             if (!"int".equals(leftType.getName()) || leftType.isArray()
                     || !"int".equals(rightType.getName()) || rightType.isArray()) {
                 String message = String.format("Operator '%s' expects integer operands, but found '%s' and '%s'.",
