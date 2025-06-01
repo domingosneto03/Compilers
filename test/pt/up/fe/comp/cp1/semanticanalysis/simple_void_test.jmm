@@ -1,0 +1,10 @@
+import io;
+
+class Simple {
+    void x;
+    
+    public static void main(String[] args) {
+        int y;
+        y = 5;
+    }
+}

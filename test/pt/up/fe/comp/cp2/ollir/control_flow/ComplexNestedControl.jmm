@@ -1,0 +1,38 @@
+import ioPlus;
+
+class ComplexNestedControl {
+    
+    public int testComplexNesting(int a) {
+        int i;
+        int j;
+        int result;
+        
+        result = 0;
+        i = 0;
+        
+        while (i < a) {
+            j = 0;
+            
+            while (j < i) {
+                if (j < 2) {
+                    if (i < 5) {
+                        result = result + 1;
+                    } else {
+                        result = result + 2;
+                    }
+                } else {
+                    while (j < 4) {
+                        result = result + j;
+                        j = j + 1;
+                    }
+                }
+                
+                j = j + 1;
+            }
+            
+            i = i + 1;
+        }
+        
+        return result;
+    }
+}

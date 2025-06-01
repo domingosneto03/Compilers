@@ -1,0 +1,17 @@
+class TestVariousScenarios {
+    int testCorrectOrder() {
+        int x;         // Declared first
+        x = 10;        // Used after declaration - OK
+        int y;
+        y = x + 5;     // Both x and y declared before use - OK
+        return y;
+    }
+    
+    int testWrongOrder() {
+        result = a + b;  // a, b, result used before declaration
+        int result;      // result declared after use
+        int a;           // a declared after use  
+        int b;           // b declared after use
+        return result;
+    }
+}

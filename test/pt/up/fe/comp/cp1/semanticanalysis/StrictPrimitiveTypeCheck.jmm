@@ -1,0 +1,19 @@
+class StrictPrimitiveTypeCheck {
+    public static void main(String[] args) {
+    }
+
+    public int testStrictPrimitiveChecking() {
+        int intVar;
+        boolean boolVar;
+        
+        // These assignments should be detected as type errors
+        intVar = false;     // boolean to int
+        boolVar = 0;        // int to boolean
+        
+        // Valid assignments for comparison
+        intVar = 100;
+        boolVar = true;
+        
+        return intVar;
+    }
+}

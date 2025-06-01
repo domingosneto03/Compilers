@@ -1,0 +1,7 @@
+import io;
+import Quicksort;
+
+class Test extends Quicksort {
+    public static void main(String[] args) {
+    }
+}

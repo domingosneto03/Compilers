@@ -32,12 +32,17 @@ public class ConditionCheck extends AnalysisVisitor {
 
         try {
             Type condType = new TypeUtils(table).getExprType(condition, currentMethod);
-            if (!"boolean".equals(condType.getName()) || condType.isArray()) {
+            
+            // Strict boolean check: must be exactly boolean and not an array
+            if (condType == null || !"boolean".equals(condType.getName()) || condType.isArray()) {
+                String actualType = condType != null ? 
+                    (condType.isArray() ? condType.getName() + "[]" : condType.getName()) : 
+                    "unknown";
                 addReport(Report.newError(
                         Stage.SEMANTIC,
                         condition.getLine(),
                         condition.getColumn(),
-                        "Condition in 'if' must be boolean, but found: " + condType.getName(),
+                        "Condition in 'if' must be boolean, but found: " + actualType,
                         null
                 ));
             }
@@ -59,12 +64,17 @@ public class ConditionCheck extends AnalysisVisitor {
 
         try {
             Type condType = new TypeUtils(table).getExprType(condition, currentMethod);
-            if (!"boolean".equals(condType.getName()) || condType.isArray()) {
+            
+            // Strict boolean check: must be exactly boolean and not an array
+            if (condType == null || !"boolean".equals(condType.getName()) || condType.isArray()) {
+                String actualType = condType != null ? 
+                    (condType.isArray() ? condType.getName() + "[]" : condType.getName()) : 
+                    "unknown";
                 addReport(Report.newError(
                         Stage.SEMANTIC,
                         condition.getLine(),
                         condition.getColumn(),
-                        "Condition in 'while' must be boolean, but found: " + condType.getName(),
+                        "Condition in 'while' must be boolean, but found: " + actualType,
                         null
                 ));
             }

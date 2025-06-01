@@ -1,0 +1,55 @@
+class AssignmentTypeCheckComprehensive {
+    int intField;
+    boolean boolField;
+    int[] intArrayField;
+
+    public static void main(String[] args) {
+    }
+
+    public int testAssignments() {
+        int a;
+        boolean b;
+        int[] intArray;
+        int[] intArray2;
+        
+        // Valid assignments - these should NOT generate errors
+        a = 42;
+        b = true;
+        intArray = new int[5];
+        intArray2 = new int[3];
+        intField = a;
+        boolField = b;
+        
+        // Invalid primitive type assignments - these SHOULD generate errors
+        a = true;        // Cannot assign boolean to int
+        b = 123;         // Cannot assign int to boolean
+        
+        // Invalid array assignments - these SHOULD generate errors
+        a = intArray;              // Cannot assign int[] to int
+        intArray = 42;             // Cannot assign int to int[]
+        
+        return 0;
+    }
+    
+    public int testArrayAssignments() {
+        int[] arr;
+        int[] arr2;
+        int index;
+        boolean wrongIndex;
+        
+        arr = new int[5];
+        arr2 = new int[3];
+        index = 2;
+        wrongIndex = true;
+        
+        // Valid array element assignments
+        arr[0] = 10;
+        arr[index] = 20;
+        
+        // Invalid array element assignments - these SHOULD generate errors
+        arr[wrongIndex] = 30;       // Boolean index not allowed
+        arr[0] = true;              // Cannot assign boolean to int array element
+        
+        return arr[0];
+    }
+}

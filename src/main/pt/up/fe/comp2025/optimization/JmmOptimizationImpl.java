@@ -41,12 +41,12 @@ public class JmmOptimizationImpl implements JmmOptimization {
 
         boolean globalChanged;
         int iterations = 0;
-        final int MAX_ITERATIONS = 5; // Reduce iterations to avoid issues
-
+        
+        // Continue until no more changes are needed
         do {
             globalChanged = false;
             iterations++;
-
+            
             System.out.println("--- Optimization iteration " + iterations + " ---");
 
             // Apply constant propagation CAREFULLY
@@ -65,7 +65,7 @@ public class JmmOptimizationImpl implements JmmOptimization {
 
             System.out.println("Total changed in iteration " + iterations + ": " + globalChanged);
 
-        } while (globalChanged && iterations < MAX_ITERATIONS);
+        } while (globalChanged);
 
         System.out.println("Optimization completed after " + iterations + " iterations");
         return semanticsResult;

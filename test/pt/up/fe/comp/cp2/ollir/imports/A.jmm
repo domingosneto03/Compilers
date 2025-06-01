@@ -1,0 +1,8 @@
+class A {
+    public boolean bar() {
+        return true;
+    }
+
+    public static void main(String[] args) {
+    }
+}

@@ -1,0 +1,22 @@
+import A;
+
+class ImportedMethodSameName {
+    public static void main(String[] args) {
+    }
+
+    public boolean test() {
+        A a;
+        int localResult;
+        boolean importedResult;
+
+        a = new A();
+        localResult = this.bar();      // Should call local bar() returning int
+        importedResult = a.bar();      // Should call imported bar() returning boolean
+
+        return importedResult;
+    }
+
+    public int bar() {
+        return 42;
+    }
+}

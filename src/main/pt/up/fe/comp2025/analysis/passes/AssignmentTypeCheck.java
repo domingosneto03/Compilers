@@ -56,6 +56,11 @@ public class AssignmentTypeCheck extends AnalysisVisitor {
 
             try {
                 rightType = typeUtils.getExprType(rhs, currentMethod);
+                if (rightType == null) {
+                    addReport(Report.newError(Stage.SEMANTIC, rhs.getLine(), rhs.getColumn(),
+                            "Could not determine type of right-hand side expression", null));
+                    return null;
+                }
             } catch (RuntimeException e) {
                 addReport(Report.newError(Stage.SEMANTIC, rhs.getLine(), rhs.getColumn(),
                         "Failed to evaluate assignment RHS: " + e.getMessage(), null));
@@ -65,18 +70,42 @@ public class AssignmentTypeCheck extends AnalysisVisitor {
         } else if (numChildren == 3) {
             // Array assignment: a[i] = expr;
             JmmNode arrayExpr = assignStmt.getChild(0);
+            JmmNode indexExpr = assignStmt.getChild(1);
             JmmNode rhs = assignStmt.getChild(2);
 
             try {
                 Type arrayType = typeUtils.getExprType(arrayExpr, currentMethod);
+                if (arrayType == null) {
+                    addReport(Report.newError(Stage.SEMANTIC, arrayExpr.getLine(), arrayExpr.getColumn(),
+                            "Could not determine type of array expression", null));
+                    return null;
+                }
+                
                 if (!arrayType.isArray()) {
                     addReport(Report.newError(Stage.SEMANTIC, arrayExpr.getLine(), arrayExpr.getColumn(),
                             "Left-hand side is not an array, but used as one.", null));
                     return null;
                 }
 
-                leftType = new Type(arrayType.getName(), false);
+                // Verify index is int
+                Type indexType = typeUtils.getExprType(indexExpr, currentMethod);
+                if (indexType == null || !"int".equals(indexType.getName()) || indexType.isArray()) {
+                    String actualIndexType = indexType != null ? 
+                        (indexType.isArray() ? indexType.getName() + "[]" : indexType.getName()) : 
+                        "unknown";
+                    addReport(Report.newError(Stage.SEMANTIC, indexExpr.getLine(), indexExpr.getColumn(),
+                            "Array index must be int, but found: " + actualIndexType, null));
+                    return null;
+                }
+
+                leftType = new Type(arrayType.getName(), false); // Element type
                 rightType = typeUtils.getExprType(rhs, currentMethod);
+                
+                if (rightType == null) {
+                    addReport(Report.newError(Stage.SEMANTIC, rhs.getLine(), rhs.getColumn(),
+                            "Could not determine type of right-hand side expression", null));
+                    return null;
+                }
 
             } catch (RuntimeException e) {
                 addReport(Report.newError(Stage.SEMANTIC, assignStmt.getLine(), assignStmt.getColumn(),
@@ -85,11 +114,14 @@ public class AssignmentTypeCheck extends AnalysisVisitor {
             }
 
         } else {
-            return null;
+            return null; // Skip malformed assignments
         }
 
+        // Strict type compatibility check
         if (!isTypeCompatible(leftType, rightType, table)) {
-            String message = String.format("Type mismatch in assignment: cannot assign %s to %s.", rightType, leftType);
+            String leftTypeStr = leftType.isArray() ? leftType.getName() + "[]" : leftType.getName();
+            String rightTypeStr = rightType.isArray() ? rightType.getName() + "[]" : rightType.getName();
+            String message = String.format("Type mismatch in assignment: cannot assign %s to %s", rightTypeStr, leftTypeStr);
             addReport(Report.newError(Stage.SEMANTIC, assignStmt.getLine(), assignStmt.getColumn(), message, null));
         }
 
@@ -117,27 +149,58 @@ public class AssignmentTypeCheck extends AnalysisVisitor {
     }
 
     private boolean isTypeCompatible(Type left, Type right, SymbolTable table) {
+        // Null types are never compatible
+        if (left == null || right == null) {
+            return false;
+        }
+
+        // Array types: both array flags and base types must match exactly
         if (left.isArray() || right.isArray()) {
             return left.getName().equals(right.getName()) && (left.isArray() == right.isArray());
         }
 
-        if (left.getName().equals("int") || left.getName().equals("boolean")) {
-            return left.getName().equals(right.getName());
+        // Primitive types: must match exactly (no implicit conversions)
+        if (isPrimitiveType(left) || isPrimitiveType(right)) {
+            return left.getName().equals(right.getName()) && left.isArray() == right.isArray();
         }
 
+        // Special case: if right type is "unknown" (imported method), assume compatibility
+        if ("unknown".equals(right.getName())) {
+            return true; // Allow assignment from unknown imported method calls
+        }
+
+        // Object types: exact match
         if (left.getName().equals(right.getName())) {
             return true;
         }
 
-        JmmSymbolTable jmmTable = (JmmSymbolTable) table;
-        String currentClass = jmmTable.getClassName();
-        if (right.getName().equals(currentClass)) {
-            String extended = jmmTable.getSuper();
-            if (extended != null && !extended.isEmpty() && extended.equals(left.getName())) {
+        // Inheritance: check if right type extends left type
+        if (table instanceof JmmSymbolTable jmmTable) {
+            String currentClass = jmmTable.getClassName();
+            String superClass = jmmTable.getSuper();
+            
+            // If right is current class and left is superclass
+            if (right.getName().equals(currentClass) && superClass != null && superClass.equals(left.getName())) {
                 return true;
             }
         }
 
-        return left.getName().equals("A") && right.getName().equals("B");
+        // Check if both types are imported (assume compatible for imported types)
+        boolean leftIsImported = table.getImports().stream()
+                .anyMatch(imp -> imp.endsWith("." + left.getName()) || imp.equals(left.getName()));
+        boolean rightIsImported = table.getImports().stream()
+                .anyMatch(imp -> imp.endsWith("." + right.getName()) || imp.equals(right.getName()));
+        
+        if (leftIsImported && rightIsImported) {
+            return true; // Assume imported types can be compatible
+        }
+
+        // No compatibility found
+        return false;
+    }
+
+    private boolean isPrimitiveType(Type type) {
+        String typeName = type.getName();
+        return "int".equals(typeName) || "boolean".equals(typeName) || "void".equals(typeName);
     }
 }

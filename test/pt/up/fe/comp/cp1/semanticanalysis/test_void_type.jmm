@@ -1,0 +1,23 @@
+import io;
+
+class TestVoidType {
+    void invalidVar; // Error: variable with void type
+    int validVar;
+    
+    public static void main(String[] args) {
+        void localVoid; // Error: local variable with void type  
+        int x;
+        x = 5;
+    }
+    
+    public void validVoidMethod() {
+        // This is valid - methods can have void return type
+        int y;
+        y = 10;
+    }
+    
+    public int anotherMethod() {
+        void anotherInvalidVar; // Error: variable with void type
+        return 42;
+    }
+}

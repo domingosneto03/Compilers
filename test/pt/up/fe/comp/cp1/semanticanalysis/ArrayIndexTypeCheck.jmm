@@ -1,0 +1,24 @@
+class ArrayIndexTypeCheck {
+    public static void main(String[] args) {
+    }
+
+    public int testArrayIndexTypes() {
+        int[] numbers;
+        boolean boolIndex;
+        int[] arrayIndex;
+        
+        numbers = new int[10];
+        boolIndex = false;
+        arrayIndex = new int[3];
+        
+        // These should generate errors for wrong index types
+        numbers[boolIndex] = 5;     // boolean index not allowed
+        numbers[arrayIndex] = 10;   // array index not allowed
+        
+        // Valid index usage for comparison
+        numbers[0] = 15;
+        numbers[2] = 25;
+        
+        return numbers[0];
+    }
+}

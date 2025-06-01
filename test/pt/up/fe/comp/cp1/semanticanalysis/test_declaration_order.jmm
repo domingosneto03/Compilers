@@ -1,0 +1,13 @@
+class TestDeclarationOrder {
+    public int test() {
+        a = 10;  // Variable used before declaration
+        int a;   // Declaration after usage - this should be an error
+        return a;
+    }
+    
+    public int testCorrect() {
+        int b;   // Declaration before usage
+        b = 20;  // Usage after declaration - this should be OK
+        return b;
+    }
+}

@@ -3,11 +3,14 @@ package pt.up.fe.comp.cp2;
 import org.junit.Test;
 import org.specs.comp.ollir.ArrayOperand;
 import org.specs.comp.ollir.ClassUnit;
+import org.specs.comp.ollir.LiteralElement;
 import org.specs.comp.ollir.Method;
+import org.specs.comp.ollir.Operand;
 import org.specs.comp.ollir.OperationType;
 import org.specs.comp.ollir.inst.*;
 import org.specs.comp.ollir.type.BuiltinKind;
 import pt.up.fe.comp.CpUtils;
+import pt.up.fe.comp.TestUtils;
 import pt.up.fe.comp.jmm.ollir.OllirResult;
 import pt.up.fe.specs.util.SpecsIo;
 
@@ -342,4 +345,144 @@ public class OllirTest {
         CpUtils.assertEquals("Number of array reads", 6, numArrayReads, result);
     }
 
+    @Test
+    public void importStatements() {
+        var result = getOllirResult("imports/Import.jmm");
+        
+        // Get the generated OLLIR code
+        String ollirCode = result.getOllirCode();
+        System.out.println("Generated OLLIR:");
+        System.out.println(ollirCode);
+        
+        // Check that the import statements are present at the beginning
+        assertTrue("OLLIR code should contain 'import io;'", ollirCode.contains("import io;"));
+        assertTrue("OLLIR code should contain 'import Quicksort;'", ollirCode.contains("import Quicksort;"));
+        
+        // Verify imports appear before class declaration
+        int ioImportIndex = ollirCode.indexOf("import io;");
+        int quicksortImportIndex = ollirCode.indexOf("import Quicksort;");
+        int classIndex = ollirCode.indexOf("Test extends Quicksort");
+        
+        assertTrue("'import io;' should appear before class declaration", ioImportIndex < classIndex);
+        assertTrue("'import Quicksort;' should appear before class declaration", quicksortImportIndex < classIndex);
+        assertTrue("Both import statements should be found", ioImportIndex >= 0 && quicksortImportIndex >= 0);
+    }
+
+    @Test
+    public void importedMethodSameName() {
+        var result = getOllirResult("imports/ImportedMethodSameName.jmm");
+
+        System.out.println("Generated OLLIR for ImportedMethodSameName:");
+        System.out.println(result.getOllirCode());
+
+        // Should compile without semantic errors
+        TestUtils.noErrors(result);
+
+        var method = CpUtils.getMethod(result, "test");
+
+        // Verify that we have the correct number of method calls
+        var calls = CpUtils.assertInstExists(CallInstruction.class, method, result);
+
+        // Should have 3 calls: new A(), this.bar(), a.bar()
+        CpUtils.assertTrue("Should have at least 2 method calls", calls.size() >= 2, result);
+
+        // Check for invokevirtual calls
+        var virtualCalls = calls.stream()
+                .filter(call -> call instanceof InvokeVirtualInstruction)
+                .map(call -> (InvokeVirtualInstruction) call)
+                .collect(Collectors.toList());
+
+        // Should have 2 virtual calls: this.bar() and a.bar()
+        CpUtils.assertEquals("Number of virtual method calls", 2, virtualCalls.size(), result);
+
+        // Check the OLLIR code structure
+        String ollirCode = result.getOllirCode();
+
+        // Should have different return types for the two bar() calls
+        // this.bar() should return i32, a.bar() should return bool
+        boolean hasBarReturningInt = ollirCode.contains(".i32 :=.i32") && ollirCode.contains("\"bar\"");
+        boolean hasBarReturningBool = ollirCode.contains(".bool :=.bool") && ollirCode.contains("\"bar\"");
+
+        CpUtils.assertTrue("Should have this.bar() call with int return type", hasBarReturningInt, result);
+        CpUtils.assertTrue("Should have a.bar() call with boolean return type", hasBarReturningBool, result);
+
+        System.out.println("✓ Test passed: Method calls with same name but different return types handled correctly");
+    }
+
+    @Test
+    public void controlFlowNestedIfWhile() {
+        var result = getOllirResult("control_flow/NestedIfWhile.jmm");
+        
+        System.out.println("---------------------- NESTED IF-WHILE OLLIR ----------------------");
+        System.out.println(result.getOllirCode());
+        System.out.println("----------------------------------------------------------------");
+
+        var method = CpUtils.getMethod(result, "testNestedControl");
+
+        // Test that we have the expected control flow structures
+        var branches = CpUtils.assertInstExists(CondBranchInstruction.class, method, result);
+        CpUtils.assertTrue("Should have at least 2 conditional branches (while + if)", branches.size() >= 2, result);
+
+        var gotos = CpUtils.assertInstExists(GotoInstruction.class, method, result);
+        CpUtils.assertTrue("Should have at least 2 gotos", gotos.size() >= 2, result);
+
+        // Check that labels are properly unique and follow naming convention
+        String ollirCode = result.getOllirCode();
+        
+        // Should have while loop labels
+        boolean hasWhileBodyLabel = ollirCode.contains("whilebody_") || ollirCode.contains("loop");
+        boolean hasEndWhileLabel = ollirCode.contains("endwhile_") || ollirCode.contains("endloop");
+        
+        // Should have if-else labels
+        boolean hasIfBodyLabel = ollirCode.contains("ifbody_") || ollirCode.contains("then");
+        boolean hasEndIfLabel = ollirCode.contains("endif_") || ollirCode.contains("else");
+        
+        CpUtils.assertTrue("Should have while body label", hasWhileBodyLabel, result);
+        CpUtils.assertTrue("Should have end while label", hasEndWhileLabel, result);
+        CpUtils.assertTrue("Should have if body label", hasIfBodyLabel, result);
+        CpUtils.assertTrue("Should have end if label", hasEndIfLabel, result);
+
+        System.out.println("✓ Test passed: Nested if-while control flow generates proper labels");
+    }
+
+    @Test
+    public void complexNestedControlFlow() {
+        var result = getOllirResult("control_flow/ComplexNestedControl.jmm");
+        
+        System.out.println("---------------------- COMPLEX NESTED CONTROL FLOW OLLIR ----------------------");
+        System.out.println(result.getOllirCode());
+        System.out.println("------------------------------------------------------------------------");
+
+        var method = CpUtils.getMethod(result, "testComplexNesting");
+
+        // Test that we have the expected control flow structures
+        var branches = CpUtils.assertInstExists(CondBranchInstruction.class, method, result);
+        CpUtils.assertTrue("Should have at least 3 conditional branches", branches.size() >= 3, result);
+
+        var gotos = CpUtils.assertInstExists(GotoInstruction.class, method, result);
+        CpUtils.assertTrue("Should have at least 4 gotos", gotos.size() >= 4, result);
+
+        // Check that labels are properly unique
+        String ollirCode = result.getOllirCode();
+        
+        // Use regex to find all labels (patterns like "label:")
+        java.util.regex.Pattern labelPattern = java.util.regex.Pattern.compile("([a-zA-Z0-9_]+):");
+        java.util.regex.Matcher matcher = labelPattern.matcher(ollirCode);
+        
+        java.util.Set<String> uniqueLabels = new java.util.HashSet<>();
+        java.util.List<String> allLabels = new java.util.ArrayList<>();
+        
+        while (matcher.find()) {
+            String label = matcher.group(1);
+            allLabels.add(label);
+            uniqueLabels.add(label);
+        }
+        
+        // All labels should be unique
+        CpUtils.assertTrue("All labels should be unique", allLabels.size() == uniqueLabels.size(), result);
+        CpUtils.assertTrue("Should have at least 6 distinct labels for complex nesting", uniqueLabels.size() >= 6, result);
+
+        System.out.println("✓ Test passed: Complex nested control flow generates unique labels");
+        System.out.println("Found " + uniqueLabels.size() + " unique labels: " + uniqueLabels);
+    }
 }

@@ -52,6 +52,7 @@ public class JasminGenerator {
         generators.put(LiteralElement.class, this::generateLiteral);
         generators.put(Operand.class, this::generateOperand);
         generators.put(BinaryOpInstruction.class, this::generateBinaryOp);
+        generators.put(UnaryOpInstruction.class, this::generateUnaryOp);
         generators.put(ReturnInstruction.class, this::generateReturn);
         generators.put(InvokeVirtualInstruction.class, this::generateInvokeVirtual);
         generators.put(InvokeSpecialInstruction.class, this::generateInvokeSpecial);
@@ -305,73 +306,93 @@ public class JasminGenerator {
     }
 
     private int calculateStackLimit(Method method) {
-        // Conservative estimation - could be more sophisticated
-        int maxStack = 0;
-        int currentStack = 0;
-
-        for (var inst : method.getInstructions()) {
-            switch (inst.getInstType()) {
-                case ASSIGN:
-                    AssignInstruction assign = (AssignInstruction) inst;
-                    if (assign.getRhs() instanceof BinaryOpInstruction) {
-                        currentStack += 2; // two operands
-                        maxStack = Math.max(maxStack, currentStack);
-                        currentStack -= 1; // result
-                    } else if (assign.getRhs() instanceof GetFieldInstruction) {
-                        currentStack += 1; // object reference
-                        maxStack = Math.max(maxStack, currentStack);
-                        currentStack = 1; // field value remains
-                    } else if (assign.getRhs() instanceof CallInstruction) {
-                        CallInstruction call = (CallInstruction) assign.getRhs();
-                        // Object + arguments
-                        currentStack += 1 + call.getArguments().size();
-                        maxStack = Math.max(maxStack, currentStack);
-                        currentStack = 1; // result remains
-                    } else {
-                        currentStack += 1; // simple load
-                        maxStack = Math.max(maxStack, currentStack);
-                    }
-                    currentStack -= 1; // store pops value
-                    break;
-                case CALL:
-                    CallInstruction call = (CallInstruction) inst;
-                    currentStack += 1 + call.getArguments().size();
-                    maxStack = Math.max(maxStack, currentStack);
-                    currentStack = 0; // call consumes all
-                    break;
-                case GETFIELD:
-                    currentStack += 1; // object reference
-                    maxStack = Math.max(maxStack, currentStack);
-                    currentStack = 1; // field value remains
-                    break;
-                case PUTFIELD:
-                    currentStack += 2; // object reference + value
-                    maxStack = Math.max(maxStack, currentStack);
-                    currentStack = 0; // putfield consumes both
-                    break;
-                case RETURN:
-                    currentStack += 1;
-                    maxStack = Math.max(maxStack, currentStack);
-                    break;
-                case BRANCH:
-                    if (inst instanceof CondBranchInstruction) {
-                        CondBranchInstruction condBranch = (CondBranchInstruction) inst;
-                        currentStack += condBranch.getOperands().size();
-                        maxStack = Math.max(maxStack, currentStack);
-                        currentStack = 0; // branch consumes operands
-                    }
-                    break;
-                case GOTO:
-                    // goto doesn't affect stack
-                    break;
-                default:
-                    currentStack += 1;
-                    maxStack = Math.max(maxStack, currentStack);
-                    break;
-            }
+        int maxStack = 1; // Start with minimum
+        
+        for (Instruction instr : method.getInstructions()) {
+            int stackUsage = calculateInstructionStackUsage(instr);
+            maxStack = Math.max(maxStack, stackUsage);
         }
+        
+        // Add some safety margin but keep reasonable
+        return Math.min(maxStack + 2, 10);
+    }
 
-        return Math.max(maxStack, 2); // minimum reasonable stack
+    /**
+     * Calculate the maximum stack usage for an instruction
+     */
+    private int calculateInstructionStackUsage(Instruction instr) {
+        switch (instr.getInstType()) {
+            case ASSIGN:
+                AssignInstruction assign = (AssignInstruction) instr;
+                if (assign.getDest() instanceof ArrayOperand) {
+                    ArrayOperand arrayDest = (ArrayOperand) assign.getDest();
+                    // Array assignment: array_ref + indices + value
+                    return 2 + arrayDest.getIndexOperands().size();
+                }
+                // Regular assignment: just the RHS stack usage
+                return calculateInstructionStackUsage(assign.getRhs());
+                
+            case CALL:
+                CallInstruction call = (CallInstruction) instr;
+                if (call instanceof InvokeVirtualInstruction || call instanceof InvokeSpecialInstruction) {
+                    // Instance method: object reference + arguments
+                    int argCount = call.getArguments().size();
+                    return 1 + argCount; // object ref + args
+                } else if (call instanceof InvokeStaticInstruction) {
+                    // Static method: just arguments
+                    return call.getArguments().size();
+                } else if (call instanceof NewInstruction) {
+                    NewInstruction newInst = (NewInstruction) call;
+                    if (newInst.getReturnType().toString().endsWith("[]")) {
+                        // Array creation: size argument
+                        return 2; // size + newarray
+                    } else {
+                        // Object creation: "new" + "dup" = 2 stack slots
+                        return 2;
+                    }
+                } else if (call instanceof ArrayLengthInstruction) {
+                    return 1; // array reference
+                }
+                return 2; // Default conservative
+                
+            case BINARYOPER:
+                BinaryOpInstruction binOp = (BinaryOpInstruction) instr;
+                // Binary operations need both operands on stack
+                if (binOp.getOperation().getOpType().toString().contains("LT") ||
+                    binOp.getOperation().getOpType().toString().contains("GT") ||
+                    binOp.getOperation().getOpType().toString().contains("EQ")) {
+                    return 2; // Comparison operations need 2 values
+                }
+                return 2; // Most binary ops need 2 operands
+                
+            case UNARYOPER:
+                return 1; // Unary operations need 1 operand
+                
+            case GETFIELD:
+                return 1; // object reference
+                
+            case PUTFIELD:
+                return 2; // object reference + value
+                
+            case RETURN:
+                ReturnInstruction ret = (ReturnInstruction) instr;
+                return ret.hasReturnValue() ? 1 : 0;
+                
+            case BRANCH:
+                if (instr instanceof CondBranchInstruction) {
+                    CondBranchInstruction condBranch = (CondBranchInstruction) instr;
+                    return condBranch.getOperands().size();
+                }
+                return 0;
+                
+            case GOTO:
+                return 0; // goto doesn't use stack
+                
+            case NOPER:
+                return 1; // single operand
+            default:
+                return 2; // conservative default
+        }
     }
 
     private int calculateLocalsLimit(Method method) {
@@ -392,8 +413,17 @@ public class JasminGenerator {
         if (assign.getDest() instanceof ArrayOperand) {
             ArrayOperand arrayDest = (ArrayOperand) assign.getDest();
 
-            // Load array reference
-            code.append(apply(arrayDest));
+            // Load array reference directly using the array variable name
+            // This avoids infinite recursion by not calling apply() on the ArrayOperand itself
+            var arrayReg = currentMethod.getVarTable().get(arrayDest.getName());
+            
+            // Load the array reference (always an object reference)
+            int arrayRegNum = arrayReg.getVirtualReg();
+            if (arrayRegNum <= 3) {
+                code.append("aload_").append(arrayRegNum).append(NL);
+            } else {
+                code.append("aload ").append(arrayRegNum).append(NL);
+            }
 
             // Load indices
             for (Element index : arrayDest.getIndexOperands()) {
@@ -415,10 +445,6 @@ public class JasminGenerator {
         }
 
         // Regular assignment
-        // generate code for loading what's on the right
-        code.append(apply(assign.getRhs()));
-
-        // store value in the stack in destination
         var lhs = assign.getDest();
 
         if (!(lhs instanceof Operand)) {
@@ -429,15 +455,83 @@ public class JasminGenerator {
 
         // get register
         var reg = currentMethod.getVarTable().get(operand.getName());
-
         var typeCode = types.getJasminType(lhs.getType());
+        int regNum = reg.getVirtualReg();
 
-        String storeInst = switch (typeCode) {
-            case "I", "Z" -> "istore";
-            default -> "astore";
-        };
+        // Check for iinc optimization: detect pattern where i = tmp and tmp = i + constant
+        if (typeCode.equals("I") && assign.getRhs() instanceof SingleOpInstruction) {
+            SingleOpInstruction singleOp = (SingleOpInstruction) assign.getRhs();
+            
+            if (singleOp.getSingleOperand() instanceof Operand) {
+                Operand rhsOperand = (Operand) singleOp.getSingleOperand();
+                String tempVarName = rhsOperand.getName();
+                
+                // Check if this is a temporary variable (starts with "tmp")
+                if (tempVarName.startsWith("tmp")) {
+                    // Look for the previous instruction that defined this temporary
+                    // We need to find the BinaryOpInstruction that assigned to this temp
+                    AssignInstruction tempDefining = findPreviousAssignmentForTemp(tempVarName);
+                    
+                    if (tempDefining != null && tempDefining.getRhs() instanceof BinaryOpInstruction) {
+                        BinaryOpInstruction binOp = (BinaryOpInstruction) tempDefining.getRhs();
+                        
+                        if (binOp.getOperation().getOpType().name().equals("ADD")) {
+                            var leftOperand = binOp.getLeftOperand();
+                            var rightOperand = binOp.getRightOperand();
+                            
+                            // Check if one operand is the target variable and the other is a constant
+                            boolean leftIsTarget = (leftOperand instanceof Operand) && 
+                                                 ((Operand) leftOperand).getName().equals(operand.getName());
+                            boolean rightIsTarget = (rightOperand instanceof Operand) && 
+                                                  ((Operand) rightOperand).getName().equals(operand.getName());
+                            
+                            LiteralElement constantOperand = null;
+                            if (leftIsTarget && rightOperand instanceof LiteralElement) {
+                                constantOperand = (LiteralElement) rightOperand;
+                            } else if (rightIsTarget && leftOperand instanceof LiteralElement) {
+                                constantOperand = (LiteralElement) leftOperand;
+                            }
+                            
+                            if (constantOperand != null) {
+                                try {
+                                    int increment = Integer.parseInt(constantOperand.getLiteral());
+                                    // Use iinc for small increments (-128 to 127)
+                                    if (increment >= -128 && increment <= 127) {
+                                        code.append("iinc ").append(regNum).append(" ").append(increment).append(NL);
+                                        return code.toString();
+                                    }
+                                } catch (NumberFormatException e) {
+                                    // Not a valid integer, fall through to regular assignment
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
-        code.append(storeInst).append(" ").append(reg.getVirtualReg()).append(NL);
+        // Regular assignment (not optimizable with iinc)
+        // generate code for loading what's on the right
+        code.append(apply(assign.getRhs()));
+
+        String storeInst;
+
+        // Use optimized store instructions for registers 0-3
+        if (typeCode.equals("I") || typeCode.equals("Z")) {
+            if (regNum <= 3) {
+                storeInst = "istore_" + regNum;
+            } else {
+                storeInst = "istore " + regNum;
+            }
+        } else {
+            if (regNum <= 3) {
+                storeInst = "astore_" + regNum;
+            } else {
+                storeInst = "astore " + regNum;
+            }
+        }
+
+        code.append(storeInst).append(NL);
 
         return code.toString();
     }
@@ -475,8 +569,18 @@ public class JasminGenerator {
             ArrayOperand arrayOp = (ArrayOperand) operand;
             var code = new StringBuilder();
 
-            // Load array reference
-            code.append(apply(arrayOp));
+            // Load array reference directly using the array variable name
+            // This avoids infinite recursion by not calling apply() on the ArrayOperand itself
+            var arrayReg = currentMethod.getVarTable().get(arrayOp.getName());
+            var arrayTypeCode = types.getJasminType(arrayOp.getType());
+            
+            // Load the array reference (always an object reference)
+            int arrayRegNum = arrayReg.getVirtualReg();
+            if (arrayRegNum <= 3) {
+                code.append("aload_").append(arrayRegNum).append(NL);
+            } else {
+                code.append("aload ").append(arrayRegNum).append(NL);
+            }
 
             // Load indices
             for (Element index : arrayOp.getIndexOperands()) {
@@ -522,27 +626,78 @@ public class JasminGenerator {
     private String generateBinaryOp(BinaryOpInstruction binaryOp) {
         var code = new StringBuilder();
 
-        code.append(apply(binaryOp.getLeftOperand()));
-        code.append(apply(binaryOp.getRightOperand()));
-
         var op = switch (binaryOp.getOperation().getOpType()) {
-            case ADD -> "iadd";
-            case SUB -> "isub";
-            case MUL -> "imul";
-            case DIV -> "idiv";
-            case AND -> "iand";
+            case ADD -> {
+                code.append(apply(binaryOp.getLeftOperand()));
+                code.append(apply(binaryOp.getRightOperand()));
+                yield "iadd";
+            }
+            case SUB -> {
+                code.append(apply(binaryOp.getLeftOperand()));
+                code.append(apply(binaryOp.getRightOperand()));
+                yield "isub";
+            }
+            case MUL -> {
+                code.append(apply(binaryOp.getLeftOperand()));
+                code.append(apply(binaryOp.getRightOperand()));
+                yield "imul";
+            }
+            case DIV -> {
+                code.append(apply(binaryOp.getLeftOperand()));
+                code.append(apply(binaryOp.getRightOperand()));
+                yield "idiv";
+            }
+            case AND -> {
+                code.append(apply(binaryOp.getLeftOperand()));
+                code.append(apply(binaryOp.getRightOperand()));
+                yield "iand";
+            }
             case LTH -> {
-                // Comparison result handling
+                // Check for comparison with zero optimization
+                var leftOperand = binaryOp.getLeftOperand();
+                var rightOperand = binaryOp.getRightOperand();
+                
+                boolean leftIsZero = isLiteralZero(leftOperand);
+                boolean rightIsZero = isLiteralZero(rightOperand);
+                
                 String trueLabel = "LT_TRUE_" + System.nanoTime();
                 String endLabel = "LT_END_" + System.nanoTime();
-                yield """
-                if_icmplt %s
-                iconst_0
-                goto %s
-                %s:
-                iconst_1
-                %s:
-                """.formatted(trueLabel, endLabel, trueLabel, endLabel);
+                
+                if (rightIsZero && !leftIsZero) {
+                    // variable < 0 -> use iflt
+                    code.append(apply(leftOperand));
+                    yield """
+                    iflt %s
+                    iconst_0
+                    goto %s
+                    %s:
+                    iconst_1
+                    %s:
+                    """.formatted(trueLabel, endLabel, trueLabel, endLabel);
+                } else if (leftIsZero && !rightIsZero) {
+                    // 0 < variable -> equivalent to variable > 0, use ifgt
+                    code.append(apply(rightOperand));
+                    yield """
+                    ifgt %s
+                    iconst_0
+                    goto %s
+                    %s:
+                    iconst_1
+                    %s:
+                    """.formatted(trueLabel, endLabel, trueLabel, endLabel);
+                } else {
+                    // Default case: use if_icmplt
+                    code.append(apply(leftOperand));
+                    code.append(apply(rightOperand));
+                    yield """
+                    if_icmplt %s
+                    iconst_0
+                    goto %s
+                    %s:
+                    iconst_1
+                    %s:
+                    """.formatted(trueLabel, endLabel, trueLabel, endLabel);
+                }
             }
             default -> throw new NotImplementedException(binaryOp.getOperation().getOpType());
         };
@@ -554,6 +709,13 @@ public class JasminGenerator {
         }
 
         return code.toString();
+    }
+
+    private boolean isLiteralZero(Element operand) {
+        if (operand instanceof LiteralElement literal) {
+            return "0".equals(literal.getLiteral());
+        }
+        return false;
     }
 
     private String generateReturn(ReturnInstruction returnInst) {
@@ -668,26 +830,35 @@ public class JasminGenerator {
 
         // Get the return type which tells us what we're creating
         var returnType = newInst.getReturnType();
-
-        if (returnType.toString().contains("array")) {
-            // Array creation - load size argument first
+        
+        // Check if this is an array creation by examining the return type
+        // Array types will have the form "INT32[]", "BOOLEAN[]", etc.
+        if (returnType.toString().endsWith("[]")) {
+            // This is array creation
             if (!newInst.getArguments().isEmpty()) {
-                code.append(apply((TreeNode) newInst.getArguments().get(0))); // Load array size
+                // Load the array size (first and only argument)
+                code.append(apply((TreeNode) newInst.getArguments().get(0)));
             }
 
-            if (returnType.toString().contains("int") || returnType.toString().contains("i32")) {
+            // Generate appropriate newarray instruction based on element type
+            String typeStr = returnType.toString();
+            if (typeStr.startsWith("INT32") || typeStr.contains("int")) {
                 code.append("newarray int").append(NL);
+            } else if (typeStr.startsWith("BOOLEAN") || typeStr.contains("boolean")) {
+                code.append("newarray boolean").append(NL);
             } else {
-                // For object arrays
+                // For object arrays, extract the object type
                 String objType = types.getJasminType(returnType).replaceAll("\\[", "");
                 code.append("anewarray ").append(objType).append(NL);
             }
-        } else {
-            // Object creation
-            String className = types.getJasminType(returnType).replaceAll("^L|;$", "");
-            code.append("new ").append(className).append(NL);
-            code.append("dup").append(NL); // Duplicate reference for constructor call
+            
+            return code.toString();
         }
+        
+        // Regular object creation
+        String className = types.getJasminType(returnType).replaceAll("^L|;$", "");
+        code.append("new ").append(className).append(NL);
+        code.append("dup").append(NL); // Duplicate reference for constructor call
 
         return code.toString();
     }
@@ -700,9 +871,24 @@ public class JasminGenerator {
             return generateInvokeSpecial((InvokeSpecialInstruction) call);
         } else if (call instanceof NewInstruction) {
             return generateNew((NewInstruction) call);
+        } else if (call instanceof ArrayLengthInstruction) {
+            return generateArrayLength((ArrayLengthInstruction) call);
         } else {
             throw new NotImplementedException("Call instruction type: " + call.getClass());
         }
+    }
+
+    private String generateArrayLength(ArrayLengthInstruction arrayLength) {
+        var code = new StringBuilder();
+        
+        // Load the array reference onto the stack
+        // The array operand is stored as the caller in ArrayLengthInstruction
+        code.append(apply(arrayLength.getCaller()));
+        
+        // Generate the arraylength instruction
+        code.append("arraylength").append(NL);
+        
+        return code.toString();
     }
 
     private String generateGetField(GetFieldInstruction getField) {
@@ -760,5 +946,55 @@ public class JasminGenerator {
                 .append(NL);
 
         return code.toString();
+    }
+
+    private String generateUnaryOp(UnaryOpInstruction unaryOp) {
+        var code = new StringBuilder();
+
+        // Load the operand
+        code.append(apply(unaryOp.getOperand()));
+
+        // Handle the unary operation
+        var op = switch (unaryOp.getOperation().getOpType()) {
+            case NOTB -> {
+                // Boolean NOT operation: flip 0 to 1 and 1 to 0
+                // We can use iconst_1 followed by ixor to flip the boolean value
+                yield "iconst_1" + NL + "ixor";
+            }
+            default -> throw new NotImplementedException(unaryOp.getOperation().getOpType());
+        };
+
+        code.append(op).append(NL);
+
+        return code.toString();
+    }
+
+    /**
+     * Find the previous assignment that defined a temporary variable.
+     * This is used for iinc optimization to detect patterns like:
+     * tmp0 = i + 1
+     * i = tmp0
+     */
+    private AssignInstruction findPreviousAssignmentForTemp(String tempVarName) {
+        List<Instruction> instructions = currentMethod.getInstructions();
+        
+        // Look through the instructions in reverse order to find the most recent assignment
+        for (int i = instructions.size() - 1; i >= 0; i--) {
+            Instruction inst = instructions.get(i);
+            
+            if (inst instanceof AssignInstruction) {
+                AssignInstruction assign = (AssignInstruction) inst;
+                Element dest = assign.getDest();
+                
+                if (dest instanceof Operand) {
+                    Operand operand = (Operand) dest;
+                    if (operand.getName().equals(tempVarName)) {
+                        return assign;
+                    }
+                }
+            }
+        }
+        
+        return null;
     }
 }

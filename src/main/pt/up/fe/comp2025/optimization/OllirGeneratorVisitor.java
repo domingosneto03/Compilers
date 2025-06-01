@@ -96,7 +96,25 @@ public class OllirGeneratorVisitor extends AJmmVisitor<Void, String> {
         }
 
         // Regular variable assignment
-        String lhsName = lhs.hasAttribute("value") ? lhs.get("value") : "UNKNOWN_ID";
+        // Handle special cases for left-hand side expressions
+        JmmNode effectiveLhs = lhs;
+        
+        // If the lhs is a ParenthesizedExpr, unwrap it to get the actual variable node
+        if (lhs.getKind().equals("ParenthesizedExpr")) {
+            effectiveLhs = lhs.getChild(0);
+        }
+        
+        // Only try to access 'value' attribute if the node type is expected to have it
+        // Using final for lhsName since it's used in lambda expressions
+        final String lhsName;
+        if (effectiveLhs.getKind().equals("VarRefExpr") || 
+            effectiveLhs.getKind().equals("PostfixExpr") || 
+            effectiveLhs.hasAttribute("value")) {
+            lhsName = effectiveLhs.get("value");
+        } else {
+            lhsName = "UNKNOWN_ID";
+        }
+        
         Type lhsType = types.getExprType(lhs, methodName);
         String ollirType = ollirTypes.toOllirType(lhsType);
 
@@ -105,7 +123,6 @@ public class OllirGeneratorVisitor extends AJmmVisitor<Void, String> {
                         table.getParameters(methodName).stream().anyMatch(s -> s.getName().equals(lhsName));
 
         boolean isField = table.getFields().stream().anyMatch(f -> f.getName().equals(lhsName));
-
 
         if (!isLocalOrParam && isField) {
             code.append("putfield(this.").append(table.getClassName())
@@ -316,6 +333,16 @@ public class OllirGeneratorVisitor extends AJmmVisitor<Void, String> {
 
         StringBuilder code = new StringBuilder();
 
+        // Generate import statements at the beginning of the file
+        for (String importStr : table.getImports()) {
+            code.append("import ").append(importStr).append(";").append(NL);
+        }
+
+        // Add an extra line after imports if any
+        if (!table.getImports().isEmpty()) {
+            code.append(NL);
+        }
+
         node.getChildren().stream()
                 .map(this::visit)
                 .forEach(code::append);
@@ -354,10 +381,10 @@ public class OllirGeneratorVisitor extends AJmmVisitor<Void, String> {
         var condExpr = exprVisitor.visit(node.getChild(0));
         code.append(condExpr.getComputation());
 
-        // Create a unique label for the else branch and the end
-        String elseLabel = ollirTypes.nextTemp("else");
-        String endLabel = ollirTypes.nextTemp("endif");
-        String thenLabel = ollirTypes.nextTemp("then");
+        // Create unique labels for the if/else structure using the new method
+        String elseLabel = ollirTypes.nextControlFlowLabel("else");
+        String endLabel = ollirTypes.nextControlFlowLabel("endif");
+        String thenLabel = ollirTypes.nextControlFlowLabel("then");
 
         // If condition is false, jump to else
         code.append("if (").append(condExpr.getCode()).append(") goto ").append(thenLabel).append(END_STMT);
@@ -378,8 +405,9 @@ public class OllirGeneratorVisitor extends AJmmVisitor<Void, String> {
     private String visitWhileStmt(JmmNode node, Void unused) {
         StringBuilder code = new StringBuilder();
 
-        String loopLabel = ollirTypes.nextTemp("loop");
-        String endLabel = ollirTypes.nextTemp("endloop");
+        // Use the nextControlFlowLabel method to create unique labels
+        String loopLabel = ollirTypes.nextControlFlowLabel("loop");
+        String endLabel = ollirTypes.nextControlFlowLabel("endloop");
 
         code.append(loopLabel).append(":").append(NL);
 

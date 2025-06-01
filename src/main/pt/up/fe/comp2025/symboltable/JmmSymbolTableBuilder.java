@@ -112,6 +112,13 @@ public class JmmSymbolTableBuilder {
                 JmmNode typeNode = param.getChild(0);
                 paramsList.add(new Symbol(TypeUtils.convertType(typeNode), param.get("name")));
             }
+            
+            // Special handling for the main method - ensure it always has the "args" parameter
+            if ("main".equals(methodName) && paramsList.isEmpty()) {
+                // Add the String[] args parameter for main method if not present
+                paramsList.add(new Symbol(new Type("String", true), "args"));
+            }
+            
             paramsMap.put(methodName, paramsList);
         }
 
@@ -119,7 +126,14 @@ public class JmmSymbolTableBuilder {
         List<String> allMethods = buildMethods(classDecl);
         for (String methodName : allMethods) {
             if (!paramsMap.containsKey(methodName)) {
-                paramsMap.put(methodName, new ArrayList<>());
+                List<Symbol> paramsList = new ArrayList<>();
+                
+                // Special handling for main method
+                if ("main".equals(methodName)) {
+                    paramsList.add(new Symbol(new Type("String", true), "args"));
+                }
+                
+                paramsMap.put(methodName, paramsList);
             }
         }
 
